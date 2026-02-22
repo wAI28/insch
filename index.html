@@ -3,193 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Horror Open World</title>
-
+<title>Infinite Open World</title>
 <style>
-body{margin:0;overflow:hidden;background:black;}
+body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
 
-#version{
-position:absolute;
-top:10px;
-left:50%;
-transform:translateX(-50%);
-color:white;
-font-size:12px;
-opacity:0.8;
-font-family:monospace;
-}
-
 #joystick{
-position:absolute;
-bottom:40px;
-left:30px;
-width:120px;
-height:120px;
-background:rgba(255,255,255,0.35);
-border-radius:50%;
-touch-action:none;
+  position:absolute;
+  bottom:40px;
+  left:30px;
+  width:120px;
+  height:120px;
+  background:rgba(255,255,255,0.15);
+  border-radius:50%;
+  touch-action:none;
 }
 #stick{
-position:absolute;
-width:50px;
-height:50px;
-background:white;
-border-radius:50%;
-left:35px;
-top:35px;
+  position:absolute;
+  width:50px;
+  height:50px;
+  background:#00ccff;
+  border-radius:50%;
+  left:35px;
+  top:35px;
 }
 
 #jump{
-position:absolute;
-bottom:60px;
-right:40px;
-width:80px;
-height:80px;
-background:rgba(255,255,255,0.5);
-border-radius:50%;
-touch-action:none;
+  position:absolute;
+  bottom:60px;
+  right:40px;
+  width:80px;
+  height:80px;
+  background:rgba(255,0,255,0.4);
+  border-radius:50%;
+  text-align:center;
+  line-height:80px;
+  color:white;
+  font-weight:bold;
+  touch-action:none;
 }
 </style>
 </head>
 <body>
 
-<div id="version">v0.0.4 NIGHT BUILD</div>
 <div id="joystick"><div id="stick"></div></div>
-<div id="jump"></div>
+<div id="jump">JUMP</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 
-// ================= 기본 =================
-const scene=new THREE.Scene();
+// ================= 기본 세팅 =================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 200, 800); // 안개 추가
 
-// 달빛에 맞춘 아주 어두운 남색 하늘
-scene.background=new THREE.Color(0x0e1624);
-scene.fog=new THREE.Fog(0x0e1624,80,450);
-
-const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,3000);
-const renderer=new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth,innerHeight);
-renderer.shadowMap.enabled=true;
-
-// 물리 기반 조명 활성화 (반사 자연스럽게)
-renderer.physicallyCorrectLights=true;
-renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.1;
-
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-window.addEventListener("resize",()=>{
-camera.aspect=innerWidth/innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(innerWidth,innerHeight);
+window.addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
 });
 
-// ================= 조명 =================
+scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
 
-// 약한 환경광
-scene.add(new THREE.AmbientLight(0x1a2233,0.5));
+// ================= 텍스처 로드 =================
+const textureLoader = new THREE.TextureLoader();
+const grassTexture = textureLoader.load(
+  "https://threejs.org/examples/textures/terrain/grasslight-big.jpg"
+);
 
-// 월광 (이전보다 약하게)
-const moonLight=new THREE.DirectionalLight(0xaabbee,0.6);
-moonLight.position.set(-200,300,-100);
-moonLight.castShadow=true;
-scene.add(moonLight);
+grassTexture.wrapS = THREE.RepeatWrapping;
+grassTexture.wrapT = THREE.RepeatWrapping;
+grassTexture.repeat.set(20,20);
 
 // ================= 노이즈 =================
 function noise(x,z){
-return Math.sin(x*0.01)*15+Math.cos(z*0.01)*15;
+  return Math.sin(x*0.01)*20 + Math.cos(z*0.01)*20;
 }
 function getHeight(x,z){
-return noise(x,z);
+  return noise(x,z);
 }
 
-// ================= 청크 =================
-const chunkSize=200;
-const segments=50;
-const renderDistance=2;
-const chunks={};
+// ================= 청크 시스템 =================
+const chunkSize = 200;
+const segments = 50;
+const renderDistance = 2;
+const chunks = {};
 
 function createChunk(cx,cz){
-const key=cx+","+cz;
-if(chunks[key]) return;
+  const key = cx+","+cz;
+  if(chunks[key]) return;
 
-const geo=new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
-geo.rotateX(-Math.PI/2);
+  const geo = new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
+  geo.rotateX(-Math.PI/2);
 
-const verts=geo.attributes.position;
-for(let i=0;i<verts.count;i++){
-const x=verts.getX(i)+cx*chunkSize;
-const z=verts.getZ(i)+cz*chunkSize;
-verts.setY(i,getHeight(x,z));
-}
-geo.computeVertexNormals();
+  const verts = geo.attributes.position;
 
-// roughness 낮춰서 손전등 반응 잘 보이게
-const mat=new THREE.MeshStandardMaterial({
-color:0x2c6e2f,
-roughness:0.85,
-metalness:0.05
-});
+  for(let i=0;i<verts.count;i++){
+    const x = verts.getX(i)+cx*chunkSize;
+    const z = verts.getZ(i)+cz*chunkSize;
+    verts.setY(i,getHeight(x,z));
+  }
 
-const mesh=new THREE.Mesh(geo,mat);
-mesh.receiveShadow=true;
-mesh.castShadow=false;
-mesh.position.set(cx*chunkSize,0,cz*chunkSize);
+  geo.computeVertexNormals();
 
-scene.add(mesh);
-chunks[key]=mesh;
+  const mat = new THREE.MeshStandardMaterial({
+    map: grassTexture
+  });
+
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(cx*chunkSize,0,cz*chunkSize);
+
+  scene.add(mesh);
+  chunks[key]=mesh;
 }
 
 function updateChunks(px,pz){
-const currentCX=Math.floor(px/chunkSize);
-const currentCZ=Math.floor(pz/chunkSize);
+  const currentCX = Math.floor(px/chunkSize);
+  const currentCZ = Math.floor(pz/chunkSize);
 
-for(let x=-renderDistance;x<=renderDistance;x++){
-for(let z=-renderDistance;z<=renderDistance;z++){
-createChunk(currentCX+x,currentCZ+z);
-}
-}
+  for(let x=-renderDistance;x<=renderDistance;x++){
+    for(let z=-renderDistance;z<=renderDistance;z++){
+      createChunk(currentCX+x,currentCZ+z);
+    }
+  }
 
-for(const key in chunks){
-const [cx,cz]=key.split(",").map(Number);
-if(Math.abs(cx-currentCX)>renderDistance||
-Math.abs(cz-currentCZ)>renderDistance){
-scene.remove(chunks[key]);
-delete chunks[key];
-}
-}
+  for(const key in chunks){
+    const [cx,cz]=key.split(",").map(Number);
+    if(Math.abs(cx-currentCX)>renderDistance ||
+       Math.abs(cz-currentCZ)>renderDistance){
+      scene.remove(chunks[key]);
+      delete chunks[key];
+    }
+  }
 }
 
 // ================= 플레이어 =================
-const player=new THREE.Object3D();
-player.position.set(0,40,0);
+const player = new THREE.Object3D();
+player.position.set(0,50,0);
 scene.add(player);
 
 let velocityY=0;
 let canJump=true;
 const gravity=-0.05;
+
 let move={x:0,z:0};
 const maxSpeed=1.5;
-
-// ================= 손전등 =================
-const flashlight=new THREE.SpotLight(
-0xffffff,
-1200,      // 물리 기반이라 강하게 줘야함
-400,
-Math.PI/5,
-0.4,
-2
-);
-
-flashlight.castShadow=true;
-flashlight.shadow.mapSize.width=1024;
-flashlight.shadow.mapSize.height=1024;
-
-scene.add(flashlight);
-scene.add(flashlight.target);
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -197,130 +160,121 @@ const stick=document.getElementById("stick");
 let joyId=null;
 
 joy.addEventListener("touchstart",e=>{
-joyId=e.changedTouches[0].identifier;
+  joyId=e.changedTouches[0].identifier;
 });
 
 joy.addEventListener("touchend",()=>{
-move={x:0,z:0};
-stick.style.left="35px";
-stick.style.top="35px";
-joyId=null;
+  move={x:0,z:0};
+  stick.style.left="35px";
+  stick.style.top="35px";
+  joyId=null;
 });
 
 joy.addEventListener("touchmove",e=>{
-for(const t of e.touches){
-if(t.identifier===joyId){
-const rect=joy.getBoundingClientRect();
-const dx=t.clientX-rect.left-60;
-const dy=t.clientY-rect.top-60;
-const max=40;
-const mx=Math.max(-max,Math.min(max,dx));
-const my=Math.max(-max,Math.min(max,dy));
-stick.style.left=mx+60-25+"px";
-stick.style.top=my+60-25+"px";
-move.x=mx/max;
-move.z=my/max;
-}
-}
+  for(const t of e.touches){
+    if(t.identifier===joyId){
+      const rect=joy.getBoundingClientRect();
+      const dx=t.clientX-rect.left-60;
+      const dy=t.clientY-rect.top-60;
+      const max=40;
+
+      const mx=Math.max(-max,Math.min(max,dx));
+      const my=Math.max(-max,Math.min(max,dy));
+
+      stick.style.left=mx+60-25+"px";
+      stick.style.top=my+60-25+"px";
+
+      move.x=mx/max;
+      move.z=my/max;
+    }
+  }
 });
 
 // ================= 시점 =================
 let lookId=null,lastX=0,lastY=0,pitch=0;
 
 window.addEventListener("touchstart",e=>{
-for(const t of e.changedTouches){
-if(t.identifier!==joyId){
-lookId=t.identifier;
-lastX=t.clientX;
-lastY=t.clientY;
-}
-}
+  for(const t of e.changedTouches){
+    if(t.identifier!==joyId){
+      lookId=t.identifier;
+      lastX=t.clientX;
+      lastY=t.clientY;
+    }
+  }
 });
 
 window.addEventListener("touchmove",e=>{
-for(const t of e.touches){
-if(t.identifier===lookId){
-const dx=t.clientX-lastX;
-const dy=t.clientY-lastY;
-player.rotation.y+=dx*0.005;
-pitch-=dy*0.005;
-pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch));
-lastX=t.clientX;
-lastY=t.clientY;
-}
-}
+  for(const t of e.touches){
+    if(t.identifier===lookId){
+      const dx=t.clientX-lastX;
+      const dy=t.clientY-lastY;
+
+      player.rotation.y+=dx*0.005;
+      pitch-=dy*0.005;
+      pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch));
+
+      lastX=t.clientX;
+      lastY=t.clientY;
+    }
+  }
 });
 
 window.addEventListener("touchend",e=>{
-for(const t of e.changedTouches){
-if(t.identifier===lookId) lookId=null;
-}
+  for(const t of e.changedTouches){
+    if(t.identifier===lookId) lookId=null;
+  }
 });
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-if(canJump){
-velocityY=1.5;
-canJump=false;
-}
+  if(canJump){
+    velocityY=1.5;
+    canJump=false;
+  }
 });
 
 // ================= 루프 =================
 function animate(){
-requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 
-const forward=new THREE.Vector3(
-Math.sin(player.rotation.y),0,
--Math.cos(player.rotation.y)
-);
-const right=new THREE.Vector3(
-Math.cos(player.rotation.y),0,
-Math.sin(player.rotation.y)
-);
+  const forward=new THREE.Vector3(
+    Math.sin(player.rotation.y),0,
+    -Math.cos(player.rotation.y)
+  );
+  const right=new THREE.Vector3(
+    Math.cos(player.rotation.y),0,
+    Math.sin(player.rotation.y)
+  );
 
-const dir=new THREE.Vector3();
-dir.addScaledVector(forward,-move.z);
-dir.addScaledVector(right,move.x);
-if(dir.length()>1) dir.normalize();
-player.position.addScaledVector(dir,maxSpeed);
+  const dir=new THREE.Vector3();
+  dir.addScaledVector(forward,-move.z);
+  dir.addScaledVector(right,move.x);
+  if(dir.length()>1) dir.normalize();
 
-velocityY+=gravity;
-player.position.y+=velocityY;
+  player.position.addScaledVector(dir,maxSpeed);
 
-const ground=getHeight(player.position.x,player.position.z)+5;
-if(player.position.y<=ground){
-player.position.y=ground;
-velocityY=0;
-canJump=true;
-}
+  velocityY+=gravity;
+  player.position.y+=velocityY;
 
-updateChunks(player.position.x,player.position.z);
+  const ground=getHeight(player.position.x,player.position.z)+5;
+  if(player.position.y<=ground){
+    player.position.y=ground;
+    velocityY=0;
+    canJump=true;
+  }
 
-flashlight.position.set(
-player.position.x,
-player.position.y+5,
-player.position.z
-);
+  updateChunks(player.position.x,player.position.z);
 
-const lookDir=new THREE.Vector3(
-Math.sin(player.rotation.y)*Math.cos(pitch),
-Math.sin(pitch),
--Math.cos(player.rotation.y)*Math.cos(pitch)
-);
+  camera.position.copy(player.position);
 
-flashlight.target.position.copy(
-player.position.clone().add(lookDir.multiplyScalar(120))
-);
-flashlight.target.updateMatrixWorld();
+  const lookDir=new THREE.Vector3(
+    Math.sin(player.rotation.y)*Math.cos(pitch),
+    Math.sin(pitch),
+    -Math.cos(player.rotation.y)*Math.cos(pitch)
+  );
+  camera.lookAt(player.position.clone().add(lookDir));
 
-camera.position.set(
-player.position.x,
-player.position.y+5,
-player.position.z
-);
-camera.lookAt(player.position.clone().add(lookDir));
-
-renderer.render(scene,camera);
+  renderer.render(scene,camera);
 }
 animate();
 

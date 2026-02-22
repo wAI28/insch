@@ -46,8 +46,6 @@ canvas{display:block;}
 <div id="jump"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/perlin-noise@1.4.0/perlin.js"></script> <!-- 퍼린 노이즈 -->
-
 <script>
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
@@ -76,14 +74,47 @@ grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(20,20);
 
-// ================= 시드 =================
-const WORLD_SEED = Math.floor(Math.random() * 1000000);
-Math.seed = WORLD_SEED;
+// ================= 퍼린 노이즈 구현 =================
+class Perlin {
+  constructor(seed=0){
+    this.p = new Uint8Array(512);
+    for(let i=0;i<256;i++) this.p[i]=i;
+    for(let i=0;i<256;i++){
+      const j = Math.floor(Math.random()*256);
+      [this.p[i], this.p[j]] = [this.p[j], this.p[i]];
+    }
+    for(let i=0;i<256;i++) this.p[i+256]=this.p[i];
+  }
+  fade(t){ return t*t*t*(t*(t*6-15)+10); }
+  lerp(t,a,b){ return a + t*(b-a); }
+  grad(hash,x,y){ 
+    const h = hash & 3;
+    const u = h<2 ? x : y;
+    const v = h<2 ? y : x;
+    return ((h&1)===0 ? u : -u) + ((h&2)===0 ? v : -v);
+  }
+  noise(x,y){
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    const xf = x - Math.floor(x);
+    const yf = y - Math.floor(y);
+    const u = this.fade(xf);
+    const v = this.fade(yf);
+    const aa = this.p[this.p[X]+Y];
+    const ab = this.p[this.p[X]+Y+1];
+    const ba = this.p[this.p[X+1]+Y];
+    const bb = this.p[this.p[X+1]+Y+1];
+    const x1 = this.lerp(u,this.grad(aa,xf,yf),this.grad(ba,xf-1,yf));
+    const x2 = this.lerp(u,this.grad(ab,xf,yf-1),this.grad(bb,xf-1,yf-1));
+    return this.lerp(v,x1,x2);
+  }
+}
 
-// ================= 부드러운 노이즈 기반 높이 =================
+const perlin = new Perlin(Math.random()*100000);
+
+// ================= 부드러운 높이 함수 =================
 function smoothNoise(x,z){
-  const scale = 0.05;
-  return noise.perlin2(x*scale, z*scale)*15;
+  return perlin.noise(x*0.05,z*0.05)*15;
 }
 
 // ================= 청크 시스템 =================

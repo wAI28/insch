@@ -8,7 +8,6 @@
 body { margin:0; overflow:hidden; background:#222; }
 canvas { display:block; }
 
-/* 조이스틱 */
 #joystick{
   position:absolute;
   bottom:40px;
@@ -29,7 +28,6 @@ canvas { display:block; }
   top:35px;
 }
 
-/* 점프 버튼 */
 #jump{
   position:absolute;
   bottom:60px;
@@ -67,15 +65,12 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// 밝은 조명
 const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
 scene.add(light);
 
-// 그리드
 const grid = new THREE.GridHelper(200, 200, 0xffffff, 0x888888);
 scene.add(grid);
 
-// 플레이어
 const player = new THREE.Object3D();
 player.position.set(0, 1.6, 5);
 scene.add(player);
@@ -87,7 +82,7 @@ const gravity = -0.01;
 let move = {x:0, z:0};
 const speed = 0.15;
 
-/* ------------------ 조이스틱 ------------------ */
+/* ---------------- 조이스틱 ---------------- */
 const joy = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 let joyId = null;
@@ -120,7 +115,7 @@ joy.addEventListener("touchmove", e=>{
   }
 });
 
-/* ------------------ 시점 (역 Y축) ------------------ */
+/* ---------------- 시점 (X,Y 둘 다 반전) ---------------- */
 let lookId = null;
 let lastX = 0;
 let lastY = 0;
@@ -142,9 +137,10 @@ window.addEventListener("touchmove", e=>{
       const dx = t.clientX - lastX;
       const dy = t.clientY - lastY;
 
-      player.rotation.y -= dx * 0.005;
+      // 🔥 좌우 반전
+      player.rotation.y += dx * 0.005;
 
-      // 🔥 역 Y축 (위로 쓸면 아래 본다)
+      // 🔥 상하 반전
       pitch -= dy * 0.005;
       pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
 
@@ -160,7 +156,7 @@ window.addEventListener("touchend", e=>{
   }
 });
 
-/* ------------------ 점프 ------------------ */
+/* ---------------- 점프 ---------------- */
 const jumpBtn = document.getElementById("jump");
 jumpBtn.addEventListener("touchstart", ()=>{
   if(canJump){
@@ -169,11 +165,10 @@ jumpBtn.addEventListener("touchstart", ()=>{
   }
 });
 
-/* ------------------ 루프 ------------------ */
+/* ---------------- 루프 ---------------- */
 function animate(){
   requestAnimationFrame(animate);
 
-  // 이동 (시선 방향 기준)
   const forward = new THREE.Vector3(
     Math.sin(player.rotation.y),
     0,
@@ -192,7 +187,6 @@ function animate(){
 
   player.position.addScaledVector(dir, speed);
 
-  // 중력
   velocityY += gravity;
   player.position.y += velocityY;
 
@@ -202,7 +196,6 @@ function animate(){
     canJump = true;
   }
 
-  // 카메라 위치
   camera.position.copy(player.position);
 
   const lookDir = new THREE.Vector3(
@@ -212,7 +205,6 @@ function animate(){
   );
 
   camera.lookAt(player.position.clone().add(lookDir));
-
   renderer.render(scene, camera);
 }
 animate();

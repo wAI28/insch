@@ -80,7 +80,7 @@ let canJump = true;
 const gravity = -0.01;
 
 let move = {x:0, z:0};
-const speed = 0.15;
+const maxSpeed = 0.15;
 
 /* ---------------- 조이스틱 ---------------- */
 const joy = document.getElementById("joystick");
@@ -105,17 +105,20 @@ joy.addEventListener("touchmove", e=>{
       const dx = t.clientX - rect.left - 60;
       const dy = t.clientY - rect.top - 60;
       const max = 40;
+
       const mx = Math.max(-max, Math.min(max, dx));
       const my = Math.max(-max, Math.min(max, dy));
+
       stick.style.left = mx+60-25+"px";
       stick.style.top = my+60-25+"px";
+
       move.x = mx/max;
       move.z = my/max;
     }
   }
 });
 
-/* ---------------- 시점 (X,Y 둘 다 반전) ---------------- */
+/* ---------------- 시점 (기존 세팅 유지) ---------------- */
 let lookId = null;
 let lastX = 0;
 let lastY = 0;
@@ -137,11 +140,9 @@ window.addEventListener("touchmove", e=>{
       const dx = t.clientX - lastX;
       const dy = t.clientY - lastY;
 
-      // 🔥 좌우 반전
       player.rotation.y += dx * 0.005;
-
-      // 🔥 상하 반전
       pitch -= dy * 0.005;
+
       pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
 
       lastX = t.clientX;
@@ -183,9 +184,12 @@ function animate(){
   const dir = new THREE.Vector3();
   dir.addScaledVector(forward, -move.z);
   dir.addScaledVector(right, move.x);
-  dir.normalize();
 
-  player.position.addScaledVector(dir, speed);
+  // 🔥 대각선 과속 방지
+  if (dir.length() > 1) dir.normalize();
+
+  // 🔥 아날로그 속도 적용
+  player.position.addScaledVector(dir, maxSpeed);
 
   velocityY += gravity;
   player.position.y += velocityY;
@@ -205,6 +209,7 @@ function animate(){
   );
 
   camera.lookAt(player.position.clone().add(lookDir));
+
   renderer.render(scene, camera);
 }
 animate();

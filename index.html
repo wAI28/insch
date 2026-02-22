@@ -1,13 +1,210 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>insch</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dark 3D Maze</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#joystick {
+  position:absolute;
+  bottom:40px;
+  left:40px;
+  width:120px;
+  height:120px;
+  background:rgba(255,255,255,0.05);
+  border-radius:50%;
+  touch-action:none;
+}
+#stick {
+  position:absolute;
+  width:50px;
+  height:50px;
+  background:rgba(180,0,255,0.6);
+  border-radius:50%;
+  left:35px;
+  top:35px;
+}
+#win {
+  position:absolute;
+  top:20px;
+  width:100%;
+  text-align:center;
+  color:#b300ff;
+  font-size:24px;
+  display:none;
+}
+</style>
 </head>
 <body>
-    
-    <a href="https://wai28.github.io/poo/">poo</a>
 
+<div id="win">탈출 성공</div>
+<div id="joystick"><div id="stick"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050005);
+scene.fog = new THREE.Fog(0x050005,5,25);
+
+const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,100);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// 바닥
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(50,50),
+  new THREE.MeshStandardMaterial({color:0x110011})
+);
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
+
+// 랜덤 미로 생성 (DFS)
+const size=15;
+let maze=[];
+for(let z=0;z<size;z++){
+  maze[z]=[];
+  for(let x=0;x<size;x++) maze[z][x]=1;
+}
+function carve(x,z){
+  const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
+  for(const [dx,dz] of dirs){
+    const nx=x+dx,nz=z+dz;
+    if(nx>0&&nz>0&&nx<size-1&&nz<size-1&&maze[nz][nx]===1){
+      maze[nz][nx]=0;
+      maze[z+dz/2][x+dx/2]=0;
+      carve(nx,nz);
+    }
+  }
+}
+maze[1][1]=0;
+carve(1,1);
+
+// 벽 생성
+const walls=[];
+const wallGeo=new THREE.BoxGeometry(1,2,1);
+const wallMat=new THREE.MeshStandardMaterial({
+  color:0x330066,
+  emissive:0x220044
+});
+for(let z=0;z<size;z++){
+  for(let x=0;x<size;x++){
+    if(maze[z][x]===1){
+      const wall=new THREE.Mesh(wallGeo,wallMat);
+      wall.position.set(x-size/2,1,z-size/2);
+      scene.add(wall);
+      walls.push(wall);
+    }
+  }
+}
+
+// 플레이어
+const player=new THREE.Object3D();
+player.position.set(1-size/2,1,1-size/2);
+scene.add(player);
+
+// 손전등
+const flashlight=new THREE.SpotLight(0xaa00ff,3,20,Math.PI/8,0.5);
+flashlight.position.set(0,0,0);
+flashlight.target.position.set(0,0,-1);
+player.add(flashlight);
+player.add(flashlight.target);
+scene.add(player);
+
+// 도착 지점
+const goal=new THREE.Mesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.MeshStandardMaterial({color:0xff00ff,emissive:0xaa00ff})
+);
+goal.position.set(size-2-size/2,0.5,size-2-size/2);
+scene.add(goal);
+
+// 이동
+let move={x:0,z:0};
+const speed=0.07;
+
+// WASD
+document.addEventListener("keydown",e=>{
+  if(e.key==="w") move.z=-1;
+  if(e.key==="s") move.z=1;
+  if(e.key==="a") move.x=-1;
+  if(e.key==="d") move.x=1;
+});
+document.addEventListener("keyup",()=>move={x:0,z:0});
+
+// 조이스틱
+const joy=document.getElementById("joystick");
+const stick=document.getElementById("stick");
+let dragging=false;
+
+joy.addEventListener("touchstart",()=>dragging=true);
+joy.addEventListener("touchend",()=>{
+  dragging=false;
+  move={x:0,z:0};
+  stick.style.left="35px";
+  stick.style.top="35px";
+});
+joy.addEventListener("touchmove",e=>{
+  if(!dragging) return;
+  const rect=joy.getBoundingClientRect();
+  const x=e.touches[0].clientX-rect.left-60;
+  const y=e.touches[0].clientY-rect.top-60;
+  const max=40;
+  const dx=Math.max(-max,Math.min(max,x));
+  const dy=Math.max(-max,Math.min(max,y));
+  stick.style.left=dx+60-25+"px";
+  stick.style.top=dy+60-25+"px";
+  move.x=dx/max;
+  move.z=dy/max;
+});
+
+// 충돌
+function collide(newPos){
+  for(const w of walls){
+    if(newPos.distanceTo(w.position)<0.8) return true;
+  }
+  return false;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  const dir=new THREE.Vector3(move.x,0,move.z);
+  dir.normalize();
+  dir.applyAxisAngle(new THREE.Vector3(0,1,0),player.rotation.y);
+
+  const newPos=player.position.clone().addScaledVector(dir,speed);
+  if(!collide(newPos)) player.position.copy(newPos);
+
+  camera.position.copy(player.position);
+  camera.position.y=1.5;
+  camera.rotation.y=player.rotation.y;
+
+  // 목표 도달
+  if(player.position.distanceTo(goal.position)<1){
+    document.getElementById("win").style.display="block";
+  }
+
+  renderer.render(scene,camera);
+}
+animate();
+
+// 마우스로 회전 (PC)
+let draggingMouse=false;
+document.addEventListener("mousedown",()=>draggingMouse=true);
+document.addEventListener("mouseup",()=>draggingMouse=false);
+document.addEventListener("mousemove",e=>{
+  if(draggingMouse){
+    player.rotation.y-=e.movementX*0.002;
+  }
+});
+</script>
 </body>
 </html>

@@ -3,16 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Maze Visible</title>
+<title>3D Grid Space</title>
 <style>
-body { margin:0; overflow:hidden; }
+body { margin:0; overflow:hidden; background:#111; }
+canvas { display:block; }
+
+/* 조이스틱 */
 #joystick{
   position:absolute;
   bottom:40px;
-  left:40px;
+  left:30px;
   width:120px;
   height:120px;
-  background:rgba(0,0,0,0.2);
+  background:rgba(255,255,255,0.08);
   border-radius:50%;
   touch-action:none;
 }
@@ -20,7 +23,7 @@ body { margin:0; overflow:hidden; }
   position:absolute;
   width:50px;
   height:50px;
-  background:#aa00ff;
+  background:#00ccff;
   border-radius:50%;
   left:35px;
   top:35px;
@@ -34,136 +37,104 @@ body { margin:0; overflow:hidden; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xcccccc); // 밝은 배경
+scene.background = new THREE.Color(0x111111);
 
-const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,200);
+// 세로 화면 대응
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth,innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-window.addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
+window.addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 
-// 바닥 (조명 필요없는 재질)
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(60,60),
-  new THREE.MeshBasicMaterial({color:0xeeeeee})
-);
-floor.rotation.x=-Math.PI/2;
-scene.add(floor);
-
-// 간단 고정 미로 (랜덤 제거)
-const maze = [
-[1,1,1,1,1],
-[1,0,0,0,1],
-[1,0,1,0,1],
-[1,0,0,0,1],
-[1,1,1,1,1],
-];
-
-const walls=[];
-const wallGeo=new THREE.BoxGeometry(1,2,1);
-const wallMat=new THREE.MeshBasicMaterial({color:0x5500ff});
-
-for(let z=0;z<maze.length;z++){
-  for(let x=0;x<maze[z].length;x++){
-    if(maze[z][x]===1){
-      const wall=new THREE.Mesh(wallGeo,wallMat);
-      wall.position.set(x-2,1,z-2);
-      scene.add(wall);
-      walls.push(wall);
-    }
-  }
-}
+// 🔹 그리드
+const grid = new THREE.GridHelper(200, 200, 0x4444ff, 0x222222);
+scene.add(grid);
 
 // 플레이어
-const player=new THREE.Object3D();
-player.position.set(-1,1,-1);
+const player = new THREE.Object3D();
+player.position.set(0, 1.6, 5);
 scene.add(player);
 
-let move={x:0,z:0};
-const speed=0.08;
+let move = {x:0, z:0};
+const speed = 0.15;
 
 // 조이스틱
-const joy=document.getElementById("joystick");
-const stick=document.getElementById("stick");
-let joyId=null;
+const joy = document.getElementById("joystick");
+const stick = document.getElementById("stick");
+let joyId = null;
 
-joy.addEventListener("touchstart",e=>{
-  joyId=e.changedTouches[0].identifier;
+joy.addEventListener("touchstart", e=>{
+  joyId = e.changedTouches[0].identifier;
 });
-joy.addEventListener("touchend",()=>{
-  move={x:0,z:0};
+
+joy.addEventListener("touchend", ()=>{
+  move = {x:0, z:0};
   stick.style.left="35px";
   stick.style.top="35px";
-  joyId=null;
+  joyId = null;
 });
-joy.addEventListener("touchmove",e=>{
+
+joy.addEventListener("touchmove", e=>{
   for(const t of e.touches){
-    if(t.identifier===joyId){
-      const rect=joy.getBoundingClientRect();
-      const dx=t.clientX-rect.left-60;
-      const dy=t.clientY-rect.top-60;
-      const max=40;
-      const mx=Math.max(-max,Math.min(max,dx));
-      const my=Math.max(-max,Math.min(max,dy));
-      stick.style.left=mx+60-25+"px";
-      stick.style.top=my+60-25+"px";
-      move.x=mx/max;
-      move.z=my/max;
+    if(t.identifier === joyId){
+      const rect = joy.getBoundingClientRect();
+      const dx = t.clientX - rect.left - 60;
+      const dy = t.clientY - rect.top - 60;
+      const max = 40;
+      const mx = Math.max(-max, Math.min(max, dx));
+      const my = Math.max(-max, Math.min(max, dy));
+      stick.style.left = mx+60-25+"px";
+      stick.style.top = my+60-25+"px";
+      move.x = mx/max;
+      move.z = my/max;
     }
   }
 });
 
-// 화면 드래그 시점 회전
-let lookId=null;
-let lastX=0;
+// 화면 드래그 시점
+let lookId = null;
+let lastX = 0;
 
-window.addEventListener("touchstart",e=>{
+window.addEventListener("touchstart", e=>{
   for(const t of e.changedTouches){
-    if(t.identifier!==joyId){
-      lookId=t.identifier;
-      lastX=t.clientX;
+    if(t.identifier !== joyId){
+      lookId = t.identifier;
+      lastX = t.clientX;
     }
   }
 });
 
-window.addEventListener("touchmove",e=>{
+window.addEventListener("touchmove", e=>{
   for(const t of e.touches){
-    if(t.identifier===lookId){
-      const dx=t.clientX-lastX;
-      player.rotation.y-=dx*0.005;
-      lastX=t.clientX;
+    if(t.identifier === lookId){
+      const dx = t.clientX - lastX;
+      player.rotation.y -= dx * 0.005;
+      lastX = t.clientX;
     }
   }
 });
 
-window.addEventListener("touchend",e=>{
+window.addEventListener("touchend", e=>{
   for(const t of e.changedTouches){
-    if(t.identifier===lookId) lookId=null;
+    if(t.identifier === lookId){
+      lookId = null;
+    }
   }
 });
 
-// 충돌
-function collide(pos){
-  for(const w of walls){
-    if(pos.distanceTo(w.position)<0.8) return true;
-  }
-  return false;
-}
-
+// 루프
 function animate(){
   requestAnimationFrame(animate);
 
-  const dir=new THREE.Vector3(move.x,0,move.z);
+  const dir = new THREE.Vector3(move.x,0,move.z);
   dir.normalize();
-  dir.applyAxisAngle(new THREE.Vector3(0,1,0),player.rotation.y);
-
-  const newPos=player.position.clone().addScaledVector(dir,speed);
-  if(!collide(newPos)) player.position.copy(newPos);
+  dir.applyAxisAngle(new THREE.Vector3(0,1,0), player.rotation.y);
+  player.position.addScaledVector(dir, speed);
 
   camera.position.copy(player.position);
   camera.lookAt(
@@ -172,7 +143,7 @@ function animate(){
     player.position.z - Math.cos(player.rotation.y)
   );
 
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }
 animate();
 </script>

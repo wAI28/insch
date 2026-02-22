@@ -2,10 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mobile FPS Base</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mobile FPS</title>
 <style>
-body { margin:0; overflow:hidden; background:#111; }
+body { margin:0; overflow:hidden; background:#222; }
 canvas { display:block; }
 
 /* 조이스틱 */
@@ -54,7 +54,7 @@ canvas { display:block; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x222222);
+scene.background = new THREE.Color(0x333333);
 
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -67,8 +67,12 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
+// 밝은 조명
+const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+scene.add(light);
+
 // 그리드
-const grid = new THREE.GridHelper(200, 200);
+const grid = new THREE.GridHelper(200, 200, 0xffffff, 0x888888);
 scene.add(grid);
 
 // 플레이어
@@ -80,11 +84,10 @@ let velocityY = 0;
 let canJump = true;
 const gravity = -0.01;
 
-// 이동
 let move = {x:0, z:0};
 const speed = 0.15;
 
-// 🔹 조이스틱
+/* ------------------ 조이스틱 ------------------ */
 const joy = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 let joyId = null;
@@ -117,11 +120,11 @@ joy.addEventListener("touchmove", e=>{
   }
 });
 
-// 🔹 시점 (좌우 + 상하)
+/* ------------------ 시점 (역 Y축) ------------------ */
 let lookId = null;
 let lastX = 0;
 let lastY = 0;
-let pitch = 0; // 상하
+let pitch = 0;
 
 window.addEventListener("touchstart", e=>{
   for(const t of e.changedTouches){
@@ -141,6 +144,7 @@ window.addEventListener("touchmove", e=>{
 
       player.rotation.y -= dx * 0.005;
 
+      // 🔥 역 Y축 (위로 쓸면 아래 본다)
       pitch -= dy * 0.005;
       pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
 
@@ -156,7 +160,7 @@ window.addEventListener("touchend", e=>{
   }
 });
 
-// 🔹 점프
+/* ------------------ 점프 ------------------ */
 const jumpBtn = document.getElementById("jump");
 jumpBtn.addEventListener("touchstart", ()=>{
   if(canJump){
@@ -165,6 +169,7 @@ jumpBtn.addEventListener("touchstart", ()=>{
   }
 });
 
+/* ------------------ 루프 ------------------ */
 function animate(){
   requestAnimationFrame(animate);
 
@@ -197,7 +202,7 @@ function animate(){
     canJump = true;
   }
 
-  // 카메라
+  // 카메라 위치
   camera.position.copy(player.position);
 
   const lookDir = new THREE.Vector3(

@@ -76,7 +76,6 @@ grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(20,20);
 
 // ================= 시드 설정 =================
-// 새로고침할 때마다 랜덤 시드
 const WORLD_SEED = Math.floor(Math.random() * 1000000);
 
 // ================= 좌표 기반 난수 =================
@@ -87,24 +86,32 @@ function pseudoRandom(x, z) {
   return s - Math.floor(s);
 }
 
-function noise(x, z) {
-  const large = pseudoRandom(
-    Math.floor(x / 80),
-    Math.floor(z / 80)
-  ) * 40;
-  const medium = pseudoRandom(
-    Math.floor(x / 25),
-    Math.floor(z / 25)
-  ) * 15;
-  const small = pseudoRandom(
-    Math.floor(x / 8),
-    Math.floor(z / 8)
-  ) * 5;
-  return large + medium + small;
+// ================= 자연스러운 높이 =================
+const heightMap = {};
+function getSmoothHeight(x,z){
+  const key = Math.floor(x)+","+Math.floor(z);
+  if(heightMap[key]!==undefined) return heightMap[key];
+
+  const base = pseudoRandom(Math.floor(x/50), Math.floor(z/50))*20;
+  const neighborOffsets = [
+    [-1,0],[1,0],[0,-1],[0,1]
+  ];
+  let sum = base;
+  let count = 1;
+  for(const [dx,dz] of neighborOffsets){
+    const nKey = Math.floor(x+dx)+","+Math.floor(z+dz);
+    if(heightMap[nKey]!==undefined){
+      sum += heightMap[nKey];
+      count++;
+    }
+  }
+  const height = sum/count;
+  heightMap[key]=height;
+  return height;
 }
 
 function getHeight(x,z){
-  return noise(x,z);
+  return getSmoothHeight(x,z);
 }
 
 // ================= 청크 시스템 =================

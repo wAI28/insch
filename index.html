@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Mobile FPS</title>
+<title>Infinite Terrain</title>
 <style>
-body { margin:0; overflow:hidden; background:#222; }
+body { margin:0; overflow:hidden; background:#87ceeb; }
 canvas { display:block; }
 
 #joystick{
@@ -14,7 +14,7 @@ canvas { display:block; }
   left:30px;
   width:120px;
   height:120px;
-  background:rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.1);
   border-radius:50%;
   touch-action:none;
 }
@@ -51,10 +51,12 @@ canvas { display:block; }
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x333333);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+// ---------------- 기본 세팅 ----------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -65,24 +67,58 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-scene.add(light);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
 
-const grid = new THREE.GridHelper(200, 200, 0xffffff, 0x888888);
-scene.add(grid);
+// ---------------- 노이즈 함수 ----------------
+// 좌표 기반 의사 랜덤 (항상 같은 결과)
+function noise(x, z){
+  return Math.sin(x * 0.05) * Math.cos(z * 0.05);
+}
 
+// ---------------- 지형 생성 ----------------
+const size = 1000;
+const segments = 200;
+
+const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
+geometry.rotateX(-Math.PI/2);
+
+const vertices = geometry.attributes.position;
+
+for(let i=0; i<vertices.count; i++){
+  const x = vertices.getX(i);
+  const z = vertices.getZ(i);
+
+  // 자연스러운 경사
+  const height =
+    noise(x, z) * 5 +
+    noise(x*0.5, z*0.5) * 10;
+
+  vertices.setY(i, height);
+}
+
+geometry.computeVertexNormals();
+
+const material = new THREE.MeshStandardMaterial({
+  color: 0x2e8b57,
+  flatShading: false
+});
+
+const terrain = new THREE.Mesh(geometry, material);
+scene.add(terrain);
+
+// ---------------- 플레이어 ----------------
 const player = new THREE.Object3D();
-player.position.set(0, 1.6, 5);
+player.position.set(0, 10, 5);
 scene.add(player);
 
 let velocityY = 0;
 let canJump = true;
-const gravity = -0.01;
+const gravity = -0.02;
 
 let move = {x:0, z:0};
-const maxSpeed = 0.15;
+const maxSpeed = 0.3;
 
-/* ---------------- 조이스틱 ---------------- */
+// ---------------- 조이스틱 ----------------
 const joy = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 let joyId = null;
@@ -118,7 +154,7 @@ joy.addEventListener("touchmove", e=>{
   }
 });
 
-/* ---------------- 시점 (기존 세팅 유지) ---------------- */
+// ---------------- 시점 (기존 세팅 유지) ----------------
 let lookId = null;
 let lastX = 0;
 let lastY = 0;
@@ -142,7 +178,6 @@ window.addEventListener("touchmove", e=>{
 
       player.rotation.y += dx * 0.005;
       pitch -= dy * 0.005;
-
       pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
 
       lastX = t.clientX;
@@ -157,16 +192,21 @@ window.addEventListener("touchend", e=>{
   }
 });
 
-/* ---------------- 점프 ---------------- */
+// ---------------- 점프 ----------------
 const jumpBtn = document.getElementById("jump");
 jumpBtn.addEventListener("touchstart", ()=>{
   if(canJump){
-    velocityY = 0.2;
+    velocityY = 0.4;
     canJump = false;
   }
 });
 
-/* ---------------- 루프 ---------------- */
+// ---------------- 플레이어 높이 계산 ----------------
+function getHeight(x, z){
+  return noise(x, z)*5 + noise(x*0.5, z*0.5)*10;
+}
+
+// ---------------- 루프 ----------------
 function animate(){
   requestAnimationFrame(animate);
 
@@ -185,17 +225,16 @@ function animate(){
   dir.addScaledVector(forward, -move.z);
   dir.addScaledVector(right, move.x);
 
-  // 🔥 대각선 과속 방지
-  if (dir.length() > 1) dir.normalize();
-
-  // 🔥 아날로그 속도 적용
+  if(dir.length() > 1) dir.normalize();
   player.position.addScaledVector(dir, maxSpeed);
 
   velocityY += gravity;
   player.position.y += velocityY;
 
-  if(player.position.y <= 1.6){
-    player.position.y = 1.6;
+  const groundHeight = getHeight(player.position.x, player.position.z) + 2;
+
+  if(player.position.y <= groundHeight){
+    player.position.y = groundHeight;
     velocityY = 0;
     canJump = true;
   }
@@ -209,10 +248,10 @@ function animate(){
   );
 
   camera.lookAt(player.position.clone().add(lookDir));
-
   renderer.render(scene, camera);
 }
 animate();
+
 </script>
 </body>
 </html>

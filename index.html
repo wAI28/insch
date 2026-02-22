@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Grid Space</title>
+<title>Mobile FPS Base</title>
 <style>
 body { margin:0; overflow:hidden; background:#111; }
 canvas { display:block; }
@@ -28,18 +28,34 @@ canvas { display:block; }
   left:35px;
   top:35px;
 }
+
+/* 점프 버튼 */
+#jump{
+  position:absolute;
+  bottom:60px;
+  right:40px;
+  width:80px;
+  height:80px;
+  background:rgba(255,0,255,0.4);
+  border-radius:50%;
+  text-align:center;
+  line-height:80px;
+  color:white;
+  font-weight:bold;
+  touch-action:none;
+}
 </style>
 </head>
 <body>
 
 <div id="joystick"><div id="stick"></div></div>
+<div id="jump">JUMP</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+scene.background = new THREE.Color(0x222222);
 
-// 세로 화면 대응
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
@@ -51,8 +67,8 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// 🔹 그리드
-const grid = new THREE.GridHelper(200, 200, 0x4444ff, 0x222222);
+// 그리드
+const grid = new THREE.GridHelper(200, 200);
 scene.add(grid);
 
 // 플레이어
@@ -60,10 +76,15 @@ const player = new THREE.Object3D();
 player.position.set(0, 1.6, 5);
 scene.add(player);
 
+let velocityY = 0;
+let canJump = true;
+const gravity = -0.01;
+
+// 이동
 let move = {x:0, z:0};
 const speed = 0.15;
 
-// 조이스틱
+// 🔹 조이스틱
 const joy = document.getElementById("joystick");
 const stick = document.getElementById("stick");
 let joyId = null;
@@ -96,15 +117,18 @@ joy.addEventListener("touchmove", e=>{
   }
 });
 
-// 화면 드래그 시점
+// 🔹 시점 (좌우 + 상하)
 let lookId = null;
 let lastX = 0;
+let lastY = 0;
+let pitch = 0; // 상하
 
 window.addEventListener("touchstart", e=>{
   for(const t of e.changedTouches){
     if(t.identifier !== joyId){
       lookId = t.identifier;
       lastX = t.clientX;
+      lastY = t.clientY;
     }
   }
 });
@@ -113,35 +137,76 @@ window.addEventListener("touchmove", e=>{
   for(const t of e.touches){
     if(t.identifier === lookId){
       const dx = t.clientX - lastX;
+      const dy = t.clientY - lastY;
+
       player.rotation.y -= dx * 0.005;
+
+      pitch -= dy * 0.005;
+      pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+
       lastX = t.clientX;
+      lastY = t.clientY;
     }
   }
 });
 
 window.addEventListener("touchend", e=>{
   for(const t of e.changedTouches){
-    if(t.identifier === lookId){
-      lookId = null;
-    }
+    if(t.identifier === lookId) lookId = null;
   }
 });
 
-// 루프
+// 🔹 점프
+const jumpBtn = document.getElementById("jump");
+jumpBtn.addEventListener("touchstart", ()=>{
+  if(canJump){
+    velocityY = 0.2;
+    canJump = false;
+  }
+});
+
 function animate(){
   requestAnimationFrame(animate);
 
-  const dir = new THREE.Vector3(move.x,0,move.z);
+  // 이동 (시선 방향 기준)
+  const forward = new THREE.Vector3(
+    Math.sin(player.rotation.y),
+    0,
+    -Math.cos(player.rotation.y)
+  );
+  const right = new THREE.Vector3(
+    Math.cos(player.rotation.y),
+    0,
+    Math.sin(player.rotation.y)
+  );
+
+  const dir = new THREE.Vector3();
+  dir.addScaledVector(forward, -move.z);
+  dir.addScaledVector(right, move.x);
   dir.normalize();
-  dir.applyAxisAngle(new THREE.Vector3(0,1,0), player.rotation.y);
+
   player.position.addScaledVector(dir, speed);
 
+  // 중력
+  velocityY += gravity;
+  player.position.y += velocityY;
+
+  if(player.position.y <= 1.6){
+    player.position.y = 1.6;
+    velocityY = 0;
+    canJump = true;
+  }
+
+  // 카메라
   camera.position.copy(player.position);
-  camera.lookAt(
-    player.position.x + Math.sin(player.rotation.y),
-    player.position.y,
-    player.position.z - Math.cos(player.rotation.y)
+
+  const lookDir = new THREE.Vector3(
+    Math.sin(player.rotation.y) * Math.cos(pitch),
+    Math.sin(pitch),
+    -Math.cos(player.rotation.y) * Math.cos(pitch)
   );
+
+  camera.lookAt(player.position.clone().add(lookDir));
 
   renderer.render(scene, camera);
 }

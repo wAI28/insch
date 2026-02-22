@@ -14,7 +14,7 @@ canvas{display:block;}
   left:30px;
   width:120px;
   height:120px;
-  background:rgba(255,255,255,0.1);
+  background:rgba(255,255,255,0.08);
   border-radius:50%;
   touch-action:none;
 }
@@ -22,7 +22,7 @@ canvas{display:block;}
   position:absolute;
   width:50px;
   height:50px;
-  background:#444;
+  background:#666;
   border-radius:50%;
   left:35px;
   top:35px;
@@ -34,7 +34,7 @@ canvas{display:block;}
   right:40px;
   width:80px;
   height:80px;
-  background:rgba(255,0,0,0.3);
+  background:rgba(255,0,0,0.25);
   border-radius:50%;
   text-align:center;
   line-height:80px;
@@ -55,12 +55,13 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.Fog(0x000000, 30, 200); // 강한 안개
+scene.fog = new THREE.Fog(0x000000, 15, 180);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 3000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.physicallyCorrectLights = false;
 document.body.appendChild(renderer.domElement);
 
 window.addEventListener("resize", ()=>{
@@ -69,8 +70,8 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// 아주 약한 주변광
-scene.add(new THREE.AmbientLight(0x111111));
+// 약한 주변광
+scene.add(new THREE.AmbientLight(0x222222));
 
 // ================= 노이즈 =================
 function noise(x,z){
@@ -81,34 +82,35 @@ function getHeight(x,z){
 }
 
 // ================= 청크 시스템 =================
-const chunkSize = 200;
-const segments = 50;
-const renderDistance = 2;
-const chunks = {};
+const chunkSize=200;
+const segments=50;
+const renderDistance=2;
+const chunks={};
 
 function createChunk(cx,cz){
-  const key = cx+","+cz;
+  const key=cx+","+cz;
   if(chunks[key]) return;
 
-  const geo = new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
+  const geo=new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
   geo.rotateX(-Math.PI/2);
 
-  const verts = geo.attributes.position;
-
+  const verts=geo.attributes.position;
   for(let i=0;i<verts.count;i++){
-    const x = verts.getX(i)+cx*chunkSize;
-    const z = verts.getZ(i)+cz*chunkSize;
+    const x=verts.getX(i)+cx*chunkSize;
+    const z=verts.getZ(i)+cz*chunkSize;
     verts.setY(i,getHeight(x,z));
   }
 
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({
-    color:0x0f3d0f
+  const mat=new THREE.MeshStandardMaterial({
+    color:0x1a4d1a,
+    roughness:1,
+    metalness:0
   });
 
-  const mesh = new THREE.Mesh(geo,mat);
-  mesh.receiveShadow = true;
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.receiveShadow=true;
   mesh.position.set(cx*chunkSize,0,cz*chunkSize);
 
   scene.add(mesh);
@@ -116,8 +118,8 @@ function createChunk(cx,cz){
 }
 
 function updateChunks(px,pz){
-  const currentCX = Math.floor(px/chunkSize);
-  const currentCZ = Math.floor(pz/chunkSize);
+  const currentCX=Math.floor(px/chunkSize);
+  const currentCZ=Math.floor(pz/chunkSize);
 
   for(let x=-renderDistance;x<=renderDistance;x++){
     for(let z=-renderDistance;z<=renderDistance;z++){
@@ -136,7 +138,7 @@ function updateChunks(px,pz){
 }
 
 // ================= 플레이어 =================
-const player = new THREE.Object3D();
+const player=new THREE.Object3D();
 player.position.set(0,40,0);
 scene.add(player);
 
@@ -148,8 +150,11 @@ let move={x:0,z:0};
 const maxSpeed=1.5;
 
 // ================= 손전등 =================
-const flashlight = new THREE.SpotLight(0xffffff, 3, 150, Math.PI/8, 0.4);
-flashlight.castShadow = true;
+const flashlight=new THREE.SpotLight(0xffffff,6,200,Math.PI/10,0.3,1);
+flashlight.castShadow=true;
+flashlight.shadow.mapSize.width=1024;
+flashlight.shadow.mapSize.height=1024;
+
 scene.add(flashlight);
 scene.add(flashlight.target);
 
@@ -264,17 +269,29 @@ function animate(){
 
   updateChunks(player.position.x,player.position.z);
 
-  // 손전등 위치 및 방향
-  flashlight.position.copy(player.position);
+  // 🔦 손전등 위치를 플레이어 머리 위치로
+  flashlight.position.set(
+    player.position.x,
+    player.position.y+5,
+    player.position.z
+  );
+
   const lookDir=new THREE.Vector3(
     Math.sin(player.rotation.y)*Math.cos(pitch),
     Math.sin(pitch),
     -Math.cos(player.rotation.y)*Math.cos(pitch)
   );
-  flashlight.target.position.copy(player.position.clone().add(lookDir));
+
+  flashlight.target.position.copy(
+    player.position.clone().add(lookDir.multiplyScalar(50))
+  );
   flashlight.target.updateMatrixWorld();
 
-  camera.position.copy(player.position);
+  camera.position.set(
+    player.position.x,
+    player.position.y+5,
+    player.position.z
+  );
   camera.lookAt(player.position.clone().add(lookDir));
 
   renderer.render(scene,camera);

@@ -74,14 +74,14 @@ grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(20,20);
 
-// ================= 퍼린 노이즈 구현 =================
+// ================= 퍼린 노이즈 =================
 class Perlin {
-  constructor(seed=0){
+  constructor(seed=Math.random()*10000){
     this.p = new Uint8Array(512);
     for(let i=0;i<256;i++) this.p[i]=i;
     for(let i=0;i<256;i++){
       const j = Math.floor(Math.random()*256);
-      [this.p[i], this.p[j]] = [this.p[j], this.p[i]];
+      [this.p[i], this.p[j]]=[this.p[j], this.p[i]];
     }
     for(let i=0;i<256;i++) this.p[i+256]=this.p[i];
   }
@@ -110,14 +110,23 @@ class Perlin {
   }
 }
 
-const perlin = new Perlin(Math.random()*100000);
+const perlin = new Perlin();
 
-// ================= 부드러운 높이 함수 =================
+// ================= 부드러운 지형 높이 =================
 function smoothNoise(x,z){
-  return perlin.noise(x*0.05,z*0.05)*15;
+  // 여러 주파수 합성(FBM)으로 부드러운 지형
+  let y = 0;
+  let amplitude = 10;
+  let frequency = 0.005;
+  for(let i=0;i<5;i++){
+    y += perlin.noise(x*frequency, z*frequency) * amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  return y;
 }
 
-// ================= 청크 시스템 =================
+// ================= 청크 =================
 const chunkSize = 200;
 const segments = 50;
 const renderDistance = 2;
@@ -131,7 +140,6 @@ function createChunk(cx,cz){
   geo.rotateX(-Math.PI/2);
 
   const verts = geo.attributes.position;
-
   for(let i=0;i<verts.count;i++){
     const x = verts.getX(i)+cx*chunkSize;
     const z = verts.getZ(i)+cz*chunkSize;
@@ -140,13 +148,9 @@ function createChunk(cx,cz){
 
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({
-    map: grassTexture
-  });
-
+  const mat = new THREE.MeshStandardMaterial({map: grassTexture});
   const mesh = new THREE.Mesh(geo,mat);
   mesh.position.set(cx*chunkSize,0,cz*chunkSize);
-
   scene.add(mesh);
   chunks[key]=mesh;
 }
@@ -188,17 +192,13 @@ const joy=document.getElementById("joystick");
 const stick=document.getElementById("stick");
 let joyId=null;
 
-joy.addEventListener("touchstart",e=>{
-  joyId=e.changedTouches[0].identifier;
-});
-
+joy.addEventListener("touchstart",e=>{ joyId=e.changedTouches[0].identifier; });
 joy.addEventListener("touchend",()=>{
   move={x:0,z:0};
   stick.style.left="35px";
   stick.style.top="35px";
   joyId=null;
 });
-
 joy.addEventListener("touchmove",e=>{
   for(const t of e.touches){
     if(t.identifier===joyId){
@@ -206,13 +206,10 @@ joy.addEventListener("touchmove",e=>{
       const dx=t.clientX-rect.left-60;
       const dy=t.clientY-rect.top-60;
       const max=40;
-
       const mx=Math.max(-max,Math.min(max,dx));
       const my=Math.max(-max,Math.min(max,dy));
-
       stick.style.left=mx+60-25+"px";
       stick.style.top=my+60-25+"px";
-
       move.x=mx/max;
       move.z=my/max;
     }
@@ -221,59 +218,38 @@ joy.addEventListener("touchmove",e=>{
 
 // ================= 시점 =================
 let lookId=null,lastX=0,lastY=0,pitch=0;
-
 window.addEventListener("touchstart",e=>{
   for(const t of e.changedTouches){
-    if(t.identifier!==joyId){
-      lookId=t.identifier;
-      lastX=t.clientX;
-      lastY=t.clientY;
-    }
+    if(t.identifier!==joyId){ lookId=t.identifier; lastX=t.clientX; lastY=t.clientY; }
   }
 });
-
 window.addEventListener("touchmove",e=>{
   for(const t of e.touches){
     if(t.identifier===lookId){
       const dx=t.clientX-lastX;
       const dy=t.clientY-lastY;
-
       player.rotation.y+=dx*0.005;
       pitch-=dy*0.005;
       pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch));
-
-      lastX=t.clientX;
-      lastY=t.clientY;
+      lastX=t.clientX; lastY=t.clientY;
     }
   }
 });
-
 window.addEventListener("touchend",e=>{
-  for(const t of e.changedTouches){
-    if(t.identifier===lookId) lookId=null;
-  }
+  for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=null; }
 });
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){
-    velocityY=1.5;
-    canJump=true;
-  }
+  if(canJump){ velocityY=1.5; canJump=true; }
 });
 
 // ================= 루프 =================
 function animate(){
   requestAnimationFrame(animate);
 
-  const forward=new THREE.Vector3(
-    Math.sin(player.rotation.y),0,
-    -Math.cos(player.rotation.y)
-  );
-  const right=new THREE.Vector3(
-    Math.cos(player.rotation.y),0,
-    Math.sin(player.rotation.y)
-  );
+  const forward=new THREE.Vector3(Math.sin(player.rotation.y),0,-Math.cos(player.rotation.y));
+  const right=new THREE.Vector3(Math.cos(player.rotation.y),0,Math.sin(player.rotation.y));
 
   const dir=new THREE.Vector3();
   dir.addScaledVector(forward,-move.z);
@@ -286,27 +262,17 @@ function animate(){
   player.position.y+=velocityY;
 
   const ground=smoothNoise(player.position.x,player.position.z)+5;
-  if(player.position.y<=ground){
-    player.position.y=ground;
-    velocityY=0;
-    canJump=true;
-  }
+  if(player.position.y<=ground){ player.position.y=ground; velocityY=0; canJump=true; }
 
   updateChunks(player.position.x,player.position.z);
 
   camera.position.copy(player.position);
-
-  const lookDir=new THREE.Vector3(
-    Math.sin(player.rotation.y)*Math.cos(pitch),
-    Math.sin(pitch),
-    -Math.cos(player.rotation.y)*Math.cos(pitch)
-  );
+  const lookDir=new THREE.Vector3(Math.sin(player.rotation.y)*Math.cos(pitch),Math.sin(pitch),-Math.cos(player.rotation.y)*Math.cos(pitch));
   camera.lookAt(player.position.clone().add(lookDir));
 
   renderer.render(scene,camera);
 }
 animate();
-
 </script>
 </body>
 </html>

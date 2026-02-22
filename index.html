@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World</title>
+<title>Horror Open World</title>
 <style>
-body{margin:0;overflow:hidden;background:#87ceeb;}
+body{margin:0;overflow:hidden;background:black;}
 canvas{display:block;}
 
 #joystick{
@@ -14,7 +14,7 @@ canvas{display:block;}
   left:30px;
   width:120px;
   height:120px;
-  background:rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.1);
   border-radius:50%;
   touch-action:none;
 }
@@ -22,7 +22,7 @@ canvas{display:block;}
   position:absolute;
   width:50px;
   height:50px;
-  background:#00ccff;
+  background:#444;
   border-radius:50%;
   left:35px;
   top:35px;
@@ -34,7 +34,7 @@ canvas{display:block;}
   right:40px;
   width:80px;
   height:80px;
-  background:rgba(255,0,255,0.4);
+  background:rgba(255,0,0,0.3);
   border-radius:50%;
   text-align:center;
   line-height:80px;
@@ -54,12 +54,13 @@ canvas{display:block;}
 
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 200, 800); // 안개 추가
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.Fog(0x000000, 30, 200); // 강한 안개
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 window.addEventListener("resize", ()=>{
@@ -68,21 +69,12 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
-
-// ================= 텍스처 로드 =================
-const textureLoader = new THREE.TextureLoader();
-const grassTexture = textureLoader.load(
-  "https://threejs.org/examples/textures/terrain/grasslight-big.jpg"
-);
-
-grassTexture.wrapS = THREE.RepeatWrapping;
-grassTexture.wrapT = THREE.RepeatWrapping;
-grassTexture.repeat.set(20,20);
+// 아주 약한 주변광
+scene.add(new THREE.AmbientLight(0x111111));
 
 // ================= 노이즈 =================
 function noise(x,z){
-  return Math.sin(x*0.01)*20 + Math.cos(z*0.01)*20;
+  return Math.sin(x*0.01)*15 + Math.cos(z*0.01)*15;
 }
 function getHeight(x,z){
   return noise(x,z);
@@ -112,10 +104,11 @@ function createChunk(cx,cz){
   geo.computeVertexNormals();
 
   const mat = new THREE.MeshStandardMaterial({
-    map: grassTexture
+    color:0x0f3d0f
   });
 
   const mesh = new THREE.Mesh(geo,mat);
+  mesh.receiveShadow = true;
   mesh.position.set(cx*chunkSize,0,cz*chunkSize);
 
   scene.add(mesh);
@@ -144,7 +137,7 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,50,0);
+player.position.set(0,40,0);
 scene.add(player);
 
 let velocityY=0;
@@ -153,6 +146,12 @@ const gravity=-0.05;
 
 let move={x:0,z:0};
 const maxSpeed=1.5;
+
+// ================= 손전등 =================
+const flashlight = new THREE.SpotLight(0xffffff, 3, 150, Math.PI/8, 0.4);
+flashlight.castShadow = true;
+scene.add(flashlight);
+scene.add(flashlight.target);
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -265,13 +264,17 @@ function animate(){
 
   updateChunks(player.position.x,player.position.z);
 
-  camera.position.copy(player.position);
-
+  // 손전등 위치 및 방향
+  flashlight.position.copy(player.position);
   const lookDir=new THREE.Vector3(
     Math.sin(player.rotation.y)*Math.cos(pitch),
     Math.sin(pitch),
     -Math.cos(player.rotation.y)*Math.cos(pitch)
   );
+  flashlight.target.position.copy(player.position.clone().add(lookDir));
+  flashlight.target.updateMatrixWorld();
+
+  camera.position.copy(player.position);
   camera.lookAt(player.position.clone().add(lookDir));
 
   renderer.render(scene,camera);

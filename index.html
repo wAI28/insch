@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World Smooth Terrain</title>
+<title>Infinite Open World Smooth & Tall Terrain</title>
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
@@ -112,15 +112,14 @@ class Perlin {
 
 const perlin = new Perlin();
 
-// ================= 부드러운 지형 높이 =================
+// ================= 부드러운 & 높은 지형 =================
 function smoothNoise(x,z){
-  // 여러 주파수 합성(FBM)으로 부드러운 지형
   let y = 0;
-  let amplitude = 10;
-  let frequency = 0.005;
-  for(let i=0;i<5;i++){
+  let amplitude = 30; // 높낮이 폭을 키움
+  let frequency = 0.004; // 낮은 주파수로 부드럽게
+  for(let i=0;i<6;i++){ // 옥타브를 더 넣어 더 자연스럽게
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
-    amplitude *= 0.5;
+    amplitude *= 0.6; // 옥타브별 감쇠 완만하게
     frequency *= 2;
   }
   return y;

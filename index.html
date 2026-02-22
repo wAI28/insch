@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Terrain</title>
+<title>Infinite Open World</title>
 <style>
-body { margin:0; overflow:hidden; background:#87ceeb; }
-canvas { display:block; }
+body{margin:0;overflow:hidden;background:#87ceeb;}
+canvas{display:block;}
 
 #joystick{
   position:absolute;
@@ -14,7 +14,7 @@ canvas { display:block; }
   left:30px;
   width:120px;
   height:120px;
-  background:rgba(255,255,255,0.1);
+  background:rgba(255,255,255,0.15);
   border-radius:50%;
   touch-action:none;
 }
@@ -52,11 +52,12 @@ canvas { display:block; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 
-// ---------------- 기본 세팅 ----------------
+// ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 200, 800); // 안개 추가
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -67,188 +68,213 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
 
-// ---------------- 노이즈 함수 ----------------
-// 좌표 기반 의사 랜덤 (항상 같은 결과)
-function noise(x, z){
-  return Math.sin(x * 0.05) * Math.cos(z * 0.05);
+// ================= 텍스처 로드 =================
+const textureLoader = new THREE.TextureLoader();
+const grassTexture = textureLoader.load(
+  "https://threejs.org/examples/textures/terrain/grasslight-big.jpg"
+);
+
+grassTexture.wrapS = THREE.RepeatWrapping;
+grassTexture.wrapT = THREE.RepeatWrapping;
+grassTexture.repeat.set(20,20);
+
+// ================= 노이즈 =================
+function noise(x,z){
+  return Math.sin(x*0.01)*20 + Math.cos(z*0.01)*20;
+}
+function getHeight(x,z){
+  return noise(x,z);
 }
 
-// ---------------- 지형 생성 ----------------
-const size = 1000;
-const segments = 200;
+// ================= 청크 시스템 =================
+const chunkSize = 200;
+const segments = 50;
+const renderDistance = 2;
+const chunks = {};
 
-const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
-geometry.rotateX(-Math.PI/2);
+function createChunk(cx,cz){
+  const key = cx+","+cz;
+  if(chunks[key]) return;
 
-const vertices = geometry.attributes.position;
+  const geo = new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
+  geo.rotateX(-Math.PI/2);
 
-for(let i=0; i<vertices.count; i++){
-  const x = vertices.getX(i);
-  const z = vertices.getZ(i);
+  const verts = geo.attributes.position;
 
-  // 자연스러운 경사
-  const height =
-    noise(x, z) * 5 +
-    noise(x*0.5, z*0.5) * 10;
+  for(let i=0;i<verts.count;i++){
+    const x = verts.getX(i)+cx*chunkSize;
+    const z = verts.getZ(i)+cz*chunkSize;
+    verts.setY(i,getHeight(x,z));
+  }
 
-  vertices.setY(i, height);
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: grassTexture
+  });
+
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(cx*chunkSize,0,cz*chunkSize);
+
+  scene.add(mesh);
+  chunks[key]=mesh;
 }
 
-geometry.computeVertexNormals();
+function updateChunks(px,pz){
+  const currentCX = Math.floor(px/chunkSize);
+  const currentCZ = Math.floor(pz/chunkSize);
 
-const material = new THREE.MeshStandardMaterial({
-  color: 0x2e8b57,
-  flatShading: false
-});
+  for(let x=-renderDistance;x<=renderDistance;x++){
+    for(let z=-renderDistance;z<=renderDistance;z++){
+      createChunk(currentCX+x,currentCZ+z);
+    }
+  }
 
-const terrain = new THREE.Mesh(geometry, material);
-scene.add(terrain);
+  for(const key in chunks){
+    const [cx,cz]=key.split(",").map(Number);
+    if(Math.abs(cx-currentCX)>renderDistance ||
+       Math.abs(cz-currentCZ)>renderDistance){
+      scene.remove(chunks[key]);
+      delete chunks[key];
+    }
+  }
+}
 
-// ---------------- 플레이어 ----------------
+// ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0, 10, 5);
+player.position.set(0,50,0);
 scene.add(player);
 
-let velocityY = 0;
-let canJump = true;
-const gravity = -0.02;
+let velocityY=0;
+let canJump=true;
+const gravity=-0.05;
 
-let move = {x:0, z:0};
-const maxSpeed = 0.3;
+let move={x:0,z:0};
+const maxSpeed=1.5;
 
-// ---------------- 조이스틱 ----------------
-const joy = document.getElementById("joystick");
-const stick = document.getElementById("stick");
-let joyId = null;
+// ================= 조이스틱 =================
+const joy=document.getElementById("joystick");
+const stick=document.getElementById("stick");
+let joyId=null;
 
-joy.addEventListener("touchstart", e=>{
-  joyId = e.changedTouches[0].identifier;
+joy.addEventListener("touchstart",e=>{
+  joyId=e.changedTouches[0].identifier;
 });
 
-joy.addEventListener("touchend", ()=>{
-  move = {x:0, z:0};
+joy.addEventListener("touchend",()=>{
+  move={x:0,z:0};
   stick.style.left="35px";
   stick.style.top="35px";
-  joyId = null;
+  joyId=null;
 });
 
-joy.addEventListener("touchmove", e=>{
+joy.addEventListener("touchmove",e=>{
   for(const t of e.touches){
-    if(t.identifier === joyId){
-      const rect = joy.getBoundingClientRect();
-      const dx = t.clientX - rect.left - 60;
-      const dy = t.clientY - rect.top - 60;
-      const max = 40;
+    if(t.identifier===joyId){
+      const rect=joy.getBoundingClientRect();
+      const dx=t.clientX-rect.left-60;
+      const dy=t.clientY-rect.top-60;
+      const max=40;
 
-      const mx = Math.max(-max, Math.min(max, dx));
-      const my = Math.max(-max, Math.min(max, dy));
+      const mx=Math.max(-max,Math.min(max,dx));
+      const my=Math.max(-max,Math.min(max,dy));
 
-      stick.style.left = mx+60-25+"px";
-      stick.style.top = my+60-25+"px";
+      stick.style.left=mx+60-25+"px";
+      stick.style.top=my+60-25+"px";
 
-      move.x = mx/max;
-      move.z = my/max;
+      move.x=mx/max;
+      move.z=my/max;
     }
   }
 });
 
-// ---------------- 시점 (기존 세팅 유지) ----------------
-let lookId = null;
-let lastX = 0;
-let lastY = 0;
-let pitch = 0;
+// ================= 시점 =================
+let lookId=null,lastX=0,lastY=0,pitch=0;
 
-window.addEventListener("touchstart", e=>{
+window.addEventListener("touchstart",e=>{
   for(const t of e.changedTouches){
-    if(t.identifier !== joyId){
-      lookId = t.identifier;
-      lastX = t.clientX;
-      lastY = t.clientY;
+    if(t.identifier!==joyId){
+      lookId=t.identifier;
+      lastX=t.clientX;
+      lastY=t.clientY;
     }
   }
 });
 
-window.addEventListener("touchmove", e=>{
+window.addEventListener("touchmove",e=>{
   for(const t of e.touches){
-    if(t.identifier === lookId){
-      const dx = t.clientX - lastX;
-      const dy = t.clientY - lastY;
+    if(t.identifier===lookId){
+      const dx=t.clientX-lastX;
+      const dy=t.clientY-lastY;
 
-      player.rotation.y += dx * 0.005;
-      pitch -= dy * 0.005;
-      pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+      player.rotation.y+=dx*0.005;
+      pitch-=dy*0.005;
+      pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch));
 
-      lastX = t.clientX;
-      lastY = t.clientY;
+      lastX=t.clientX;
+      lastY=t.clientY;
     }
   }
 });
 
-window.addEventListener("touchend", e=>{
+window.addEventListener("touchend",e=>{
   for(const t of e.changedTouches){
-    if(t.identifier === lookId) lookId = null;
+    if(t.identifier===lookId) lookId=null;
   }
 });
 
-// ---------------- 점프 ----------------
-const jumpBtn = document.getElementById("jump");
-jumpBtn.addEventListener("touchstart", ()=>{
+// ================= 점프 =================
+document.getElementById("jump").addEventListener("touchstart",()=>{
   if(canJump){
-    velocityY = 0.4;
-    canJump = false;
+    velocityY=1.5;
+    canJump=false;
   }
 });
 
-// ---------------- 플레이어 높이 계산 ----------------
-function getHeight(x, z){
-  return noise(x, z)*5 + noise(x*0.5, z*0.5)*10;
-}
-
-// ---------------- 루프 ----------------
+// ================= 루프 =================
 function animate(){
   requestAnimationFrame(animate);
 
-  const forward = new THREE.Vector3(
-    Math.sin(player.rotation.y),
-    0,
+  const forward=new THREE.Vector3(
+    Math.sin(player.rotation.y),0,
     -Math.cos(player.rotation.y)
   );
-  const right = new THREE.Vector3(
-    Math.cos(player.rotation.y),
-    0,
+  const right=new THREE.Vector3(
+    Math.cos(player.rotation.y),0,
     Math.sin(player.rotation.y)
   );
 
-  const dir = new THREE.Vector3();
-  dir.addScaledVector(forward, -move.z);
-  dir.addScaledVector(right, move.x);
+  const dir=new THREE.Vector3();
+  dir.addScaledVector(forward,-move.z);
+  dir.addScaledVector(right,move.x);
+  if(dir.length()>1) dir.normalize();
 
-  if(dir.length() > 1) dir.normalize();
-  player.position.addScaledVector(dir, maxSpeed);
+  player.position.addScaledVector(dir,maxSpeed);
 
-  velocityY += gravity;
-  player.position.y += velocityY;
+  velocityY+=gravity;
+  player.position.y+=velocityY;
 
-  const groundHeight = getHeight(player.position.x, player.position.z) + 2;
-
-  if(player.position.y <= groundHeight){
-    player.position.y = groundHeight;
-    velocityY = 0;
-    canJump = true;
+  const ground=getHeight(player.position.x,player.position.z)+5;
+  if(player.position.y<=ground){
+    player.position.y=ground;
+    velocityY=0;
+    canJump=true;
   }
+
+  updateChunks(player.position.x,player.position.z);
 
   camera.position.copy(player.position);
 
-  const lookDir = new THREE.Vector3(
-    Math.sin(player.rotation.y) * Math.cos(pitch),
+  const lookDir=new THREE.Vector3(
+    Math.sin(player.rotation.y)*Math.cos(pitch),
     Math.sin(pitch),
-    -Math.cos(player.rotation.y) * Math.cos(pitch)
+    -Math.cos(player.rotation.y)*Math.cos(pitch)
   );
-
   camera.lookAt(player.position.clone().add(lookDir));
-  renderer.render(scene, camera);
+
+  renderer.render(scene,camera);
 }
 animate();
 

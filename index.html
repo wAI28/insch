@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World Mini Player</title>
+<title>Infinite Open World Giant Terrain</title>
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
@@ -50,9 +50,9 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 20000, 80000);
+scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -72,7 +72,7 @@ const grassTexture = textureLoader.load(
 );
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
-grassTexture.repeat.set(2000,2000);
+grassTexture.repeat.set(20,20);
 
 // ================= 퍼린 노이즈 =================
 class Perlin {
@@ -112,11 +112,11 @@ class Perlin {
 
 const perlin = new Perlin();
 
-// ================= 부드럽고 큰 지형 =================
+// ================= 부드럽고 높은 & 폭 큰 지형 =================
 function smoothNoise(x,z){
   let y = 0;
-  let amplitude = 30000; // 고저 차 확대
-  let frequency = 0.00004;
+  let amplitude = 30000; // 높낮이 ×1000
+  let frequency = 0.004; // 주파수 낮게 유지 (부드럽게)
   for(let i=0;i<6;i++){
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
     amplitude *= 0.6;
@@ -126,7 +126,7 @@ function smoothNoise(x,z){
 }
 
 // ================= 청크 =================
-const chunkSize = 20000;
+const chunkSize = 200000; // 폭 ×1000
 const segments = 50;
 const renderDistance = 2;
 const chunks = {};
@@ -176,15 +176,15 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,100,0); // 시선 낮춤
+player.position.set(0,50,0); // 플레이어 그대로
 scene.add(player);
 
 let velocityY=0;
 let canJump=true;
-const gravity=-0.5;
+const gravity=-0.05;
 
 let move={x:0,z:0};
-const maxSpeed=5; // 속도 훨씬 감소
+const maxSpeed=1.5;
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -240,7 +240,7 @@ window.addEventListener("touchend",e=>{
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){ velocityY=10; canJump=true; }
+  if(canJump){ velocityY=1.5; canJump=true; }
 });
 
 // ================= 루프 =================
@@ -260,7 +260,7 @@ function animate(){
   velocityY+=gravity;
   player.position.y+=velocityY;
 
-  const ground=smoothNoise(player.position.x,player.position.z)+50; 
+  const ground=smoothNoise(player.position.x,player.position.z)+5;
   if(player.position.y<=ground){ player.position.y=ground; velocityY=0; canJump=true; }
 
   updateChunks(player.position.x,player.position.z);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Vast Lands with Glowing Sun</title>
+<title>Vast World - Deep Sea & Soft Forest</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -24,15 +24,15 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x82b4ff);
-scene.fog = new THREE.Fog(0x82b4ff, 2000, 40000);
+scene.fog = new THREE.Fog(0x82b4ff, 2000, 45000);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 60000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 65000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// ================= 빛나는 태양 객체 추가 =================
+// ================= 빛나는 태양 =================
 function createSun() {
   const canvas = document.createElement('canvas');
   canvas.width = 128; canvas.height = 128;
@@ -48,29 +48,28 @@ function createSun() {
   const sunTex = new THREE.CanvasTexture(canvas);
   const sunMat = new THREE.SpriteMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending });
   const sunSprite = new THREE.Sprite(sunMat);
-  sunSprite.scale.set(2000, 2000, 1);
-  sunSprite.position.set(5000, 8000, -10000); // 고정된 먼 위치
+  sunSprite.scale.set(2500, 2500, 1);
+  sunSprite.position.set(8000, 10000, -12000);
   scene.add(sunSprite);
 
-  // 실제 물리적 광원 (태양 위치와 동기화)
   const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
   sunLight.position.copy(sunSprite.position);
   scene.add(sunLight);
 }
 createSun();
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
-// ================= 바다 (높이 -15로 약간 하향) =================
+// ================= 바다 표면 =================
 const waterGeo = new THREE.PlaneGeometry(80000, 80000);
 const waterMat = new THREE.MeshStandardMaterial({
-  color: 0x0055ff, transparent: true, opacity: 0.6, roughness: 0.1
+  color: 0x0055ff, transparent: true, opacity: 0.55, roughness: 0.1
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotateX(-Math.PI/2);
-water.position.y = -15; // 살짝 내림
+water.position.y = -15; // 해수면 높이
 scene.add(water);
 
-// ================= 지형 로직 =================
+// ================= 지형 노이즈 알고리즘 =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -98,7 +97,7 @@ class Perlin {
 const perlin = new Perlin();
 
 function getTerrainHeight(x, z) {
-  let y = -100;
+  let y = -80;
   let amp = 1500, freq = 0.00008;
   for(let i=0; i<7; i++) {
     y += perlin.noise(x * freq, z * freq) * amp;
@@ -107,21 +106,37 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
+// ================= 청크 및 고도/수심별 색상 =================
 const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
+
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
   if(chunks[key]) return;
   const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
   geo.rotateX(-Math.PI/2);
   const pos = geo.attributes.position, colors = [], color = new THREE.Color();
+
+  const snow = new THREE.Color(0xffffff);
+  const rock = new THREE.Color(0x444444);
+  const midForest = new THREE.Color(0x407a40); // 진한 녹색을 연하게 조정 (기존 0x2e5a2e)
+  const grass = new THREE.Color(0x55bb55);
+  const sand = new THREE.Color(0xd2b48c);
+  const deepSea = new THREE.Color(0x00081a); // 심해의 어두운 남색
+
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
-    if(h > 900) color.set(0xffffff);      
-    else if(h > 500) color.set(0x444444); 
-    else if(h > 200) color.set(0x2e5a2e); 
-    else if(h > 30) color.set(0x44aa44);  
-    else color.set(0xd2b48c);
+    
+    if(h > 900) color.copy(snow);      
+    else if(h > 500) color.copy(rock); 
+    else if(h > 200) color.copy(midForest); 
+    else if(h > 35)  color.copy(grass);  
+    else if(h > -15) color.copy(sand);
+    else {
+      // 심해 효과: 수심 -15에서 -300까지 갈수록 어두워짐
+      const depthFactor = Math.min(1, Math.max(0, (h + 15) / -285)); 
+      color.copy(sand).lerp(deepSea, depthFactor);
+    }
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -136,6 +151,10 @@ function updateChunks(px, pz) {
   water.position.x = px; water.position.z = pz;
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
+  for(const key in chunks){
+    const [cx,cz]=key.split(",").map(Number);
+    if(Math.abs(cx-ccx)>renderDistance || Math.abs(cz-ccz)>renderDistance){ scene.remove(chunks[key]); delete chunks[key]; }
+  }
 }
 
 // ================= 플레이어 및 조작 =================
@@ -143,7 +162,7 @@ const player = new THREE.Object3D();
 player.position.set(0, 300, 0); 
 scene.add(player);
 
-let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null;
+let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null, lx=0, ly=0;
 const walkSpeed = 1.2, gravity = -0.015;
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
@@ -183,8 +202,7 @@ document.getElementById("jump").addEventListener("touchstart", e => {
   e.preventDefault(); if(canJump){velY=0.4; canJump=false;}
 }, {passive: false});
 
-// ================= 루프 =================
-let lx=0, ly=0;
+// ================= 메인 루프 =================
 function animate() {
   requestAnimationFrame(animate);
   const fw = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);

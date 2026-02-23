@@ -176,15 +176,15 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,5000,0); // 높이 유지
+player.position.set(0,500,0); // 시선 높이 낮춤
 scene.add(player);
 
 let velocityY=0;
 let canJump=true;
-const gravity=-0.5; // 원래 -5 → -0.5
+const gravity=-0.5;
 
 let move={x:0,z:0};
-const maxSpeed=15; // 원래 150 → 15
+const maxSpeed=15;
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -240,7 +240,7 @@ window.addEventListener("touchend",e=>{
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){ velocityY=15; canJump=true; } // 원래 150 → 15
+  if(canJump){ velocityY=15; canJump=true; }
 });
 
 // ================= 루프 =================
@@ -260,7 +260,7 @@ function animate(){
   velocityY+=gravity;
   player.position.y+=velocityY;
 
-  const ground=smoothNoise(player.position.x,player.position.z)+500;
+  const ground=smoothNoise(player.position.x,player.position.z)+50; // 낮은 시선 기준
   if(player.position.y<=ground){ player.position.y=ground; velocityY=0; canJump=true; }
 
   updateChunks(player.position.x,player.position.z);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Extreme World - Bug Fixed</title>
+<title>Walking through the Vast Lands</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -24,9 +24,9 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x82b4ff);
-scene.fog = new THREE.Fog(0x82b4ff, 5000, 45000);
+scene.fog = new THREE.Fog(0x82b4ff, 3000, 40000);
 
-const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 2, 60000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 60000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -38,7 +38,7 @@ scene.add(sun);
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
 const waterGeo = new THREE.PlaneGeometry(70000, 70000);
-const waterMat = new THREE.MeshStandardMaterial({color: 0x0044ff, transparent: true, opacity: 0.5});
+const waterMat = new THREE.MeshStandardMaterial({color: 0x0044ff, transparent: true, opacity: 0.4});
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotateX(-Math.PI/2);
 water.position.y = -50; 
@@ -80,8 +80,8 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
-// ================= 청크 및 고도별 색상 (수정됨) =================
-const chunkSize = 4000, segments = 48, renderDistance = 4, chunks = {};
+// ================= 청크 및 색상 설정 =================
+const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
 
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
@@ -97,18 +97,17 @@ function createChunk(cx, cz) {
     const h = getTerrainHeight(x, z);
     pos.setY(i, h);
 
-    // 고도별 색상: 만년설 > 바위 > 진한초록 > 연한초록 > 모래 (해저 포함)
     if(h > 900) color.set(0xffffff);      // 만년설
-    else if(h > 500) color.set(0x444444); // 바위 (짙은 회색)
-    else if(h > 200) color.set(0x114411); // 진한 초록색
+    else if(h > 500) color.set(0x444444); // 바위
+    else if(h > 200) color.set(0x2e5a2e); // 진한 초록색 (약간 연하게 조정)
     else if(h > 50) color.set(0x44aa44);  // 연한 초록색
-    else color.set(0xd2b48c);             // 50 이하(모래 및 해저) 통일
+    else color.set(0xd2b48c);             // 모래/해저
     
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
   mesh.position.set(cx * chunkSize, 0, cz * chunkSize);
   scene.add(mesh); chunks[key] = mesh;
 }
@@ -124,29 +123,22 @@ function updateChunks(px, pz) {
   }
 }
 
-// ================= 조작 시스템 (버그 수정됨) =================
+// ================= 조작 시스템 (속도 및 높이 조정) =================
 const player = new THREE.Object3D();
-player.position.set(0, 1500, 0); 
+player.position.set(0, 500, 0); 
 scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null;
-const walkSpeed = 30.0, gravity = -0.22;
+const walkSpeed = 1.2; // 이동속도 대폭 하향 (걷는 느낌)
+const gravity = -0.015; // 높이가 낮아진 만큼 중력도 부드럽게 조정
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 
-// 조이스틱 터치 핸들러
-joy.addEventListener("touchstart", e => {
-  e.preventDefault(); // 기본 동작 방지
-  joyId = e.changedTouches[0].identifier;
-}, {passive: false});
-
-// 화면 전체 터치 핸들러 (시점 회전)
+joy.addEventListener("touchstart", e => { e.preventDefault(); joyId = e.changedTouches[0].identifier; }, {passive: false});
 window.addEventListener("touchstart", e => {
   for(const t of e.changedTouches) {
-    // 터치한 타겟이 조이스틱이나 점프 버튼이 아닐 때만 시점 제어 시작
     if(t.target !== joy && t.target !== stick && t.target.id !== "jump") {
-      lookId = t.identifier;
-      lx = t.clientX; ly = t.clientY;
+      lookId = t.identifier; lx = t.clientX; ly = t.clientY;
     }
   }
 }, {passive: false});
@@ -159,8 +151,8 @@ window.addEventListener("touchmove", e => {
       move.x=Math.cos(a)*(d/40); move.z=Math.sin(a)*(d/40);
       stick.style.left=Math.cos(a)*d+35+"px"; stick.style.top=Math.sin(a)*d+35+"px";
     } else if(t.identifier === lookId) {
-      player.rotation.y += (t.clientX-lx)*-0.005;
-      pitch = Math.max(-1.5, Math.min(1.5, pitch+(t.clientY-ly)*-0.005));
+      player.rotation.y += (t.clientX-lx)*-0.004;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch+(t.clientY-ly)*-0.004));
       lx=t.clientX; ly=t.clientY;
     }
   }
@@ -168,17 +160,13 @@ window.addEventListener("touchmove", e => {
 
 window.addEventListener("touchend", e => {
   for(const t of e.changedTouches) {
-    if(t.identifier === joyId) {
-      move.x=0; move.z=0; stick.style.left="35px"; stick.style.top="35px"; joyId=null;
-    } else if(t.identifier === lookId) {
-      lookId = null;
-    }
+    if(t.identifier === joyId) { move.x=0; move.z=0; stick.style.left="35px"; stick.style.top="35px"; joyId=null; }
+    else if(t.identifier === lookId) { lookId = null; }
   }
 });
 
 document.getElementById("jump").addEventListener("touchstart", e => {
-  e.preventDefault();
-  if(canJump){velY=5.5; canJump=false;}
+  e.preventDefault(); if(canJump){velY=0.4; canJump=false;}
 }, {passive: false});
 
 // ================= 루프 =================
@@ -190,8 +178,10 @@ function animate() {
   player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
   
   velY += gravity; player.position.y += velY;
-  const terrainH = getTerrainHeight(player.position.x, player.position.z) + 18;
-  const ground = Math.max(terrainH, -35); 
+  
+  // 플레이어 눈높이: 지형 높이 + 1.7 (기존 18에서 하향)
+  const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.7;
+  const ground = Math.max(terrainH, -48.3); 
   if(player.position.y < ground){ player.position.y=ground; velY=0; canJump=true; }
 
   updateChunks(player.position.x, player.position.z);

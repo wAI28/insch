@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Vast Lands with Floating Clouds</title>
+<title>Vast Lands and Deep Oceans</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -24,7 +24,7 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x82b4ff);
-scene.fog = new THREE.Fog(0x82b4ff, 3000, 45000);
+scene.fog = new THREE.Fog(0x82b4ff, 2000, 40000);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 60000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -37,27 +37,20 @@ sun.position.set(1000, 2000, 1000);
 scene.add(sun);
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-// ================= 구름 시스템 (추가됨) =================
-const cloudCount = 1500;
-const cloudGeo = new THREE.BufferGeometry();
-const cloudPos = new Float32Array(cloudCount * 3);
-for(let i=0; i<cloudCount; i++) {
-  cloudPos[i*3] = (Math.random() - 0.5) * 15000;   // 넓은 범위
-  cloudPos[i*3+1] = 1200 + (Math.random() - 0.5) * 200; // 고도 1200 근처
-  cloudPos[i*3+2] = (Math.random() - 0.5) * 15000;
-}
-cloudGeo.setAttribute('position', new THREE.BufferAttribute(cloudPos, 3));
-const cloudMat = new THREE.PointsMaterial({
-  color: 0xffffff,
-  size: 80,
-  transparent: true,
-  opacity: 0.5,
-  depthWrite: false
+// ================= 바다 (Sea Level) =================
+const waterGeo = new THREE.PlaneGeometry(80000, 80000);
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0x0055ff, 
+  transparent: true, 
+  opacity: 0.6,
+  roughness: 0.1
 });
-const clouds = new THREE.Points(cloudGeo, cloudMat);
-scene.add(clouds);
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.rotateX(-Math.PI/2);
+water.position.y = 0; // 해수면을 0으로 설정
+scene.add(water);
 
-// ================= 지형 로직 (동일) =================
+// ================= 노이즈 알고리즘 =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -85,7 +78,8 @@ class Perlin {
 const perlin = new Perlin();
 
 function getTerrainHeight(x, z) {
-  let y = 0, amp = 1500, freq = 0.00008;
+  let y = -100; // 기본 높이를 낮춰서 바다가 잘 생기게 함
+  let amp = 1500, freq = 0.00008;
   for(let i=0; i<7; i++) {
     y += perlin.noise(x * freq, z * freq) * amp;
     amp *= 0.48; freq *= 2.2;
@@ -93,7 +87,8 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
-const chunkSize = 4000, segments = 45, renderDistance = 4, chunks = {};
+// ================= 청크 및 색상 =================
+const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
   if(chunks[key]) return;
@@ -103,11 +98,14 @@ function createChunk(cx, cz) {
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
+    
+    // 고도별 색상
     if(h > 900) color.set(0xffffff);      
     else if(h > 500) color.set(0x444444); 
     else if(h > 200) color.set(0x2e5a2e); 
-    else if(h > 50) color.set(0x44aa44);  
-    else color.set(0xd2b48c);             
+    else if(h > 30) color.set(0x44aa44);  
+    else color.set(0xd2b48c); // 30 이하 모래색 (해저 포함)
+    
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -119,13 +117,14 @@ function createChunk(cx, cz) {
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
+  water.position.x = px; water.position.z = pz; // 바다가 플레이어를 따라옴
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
 }
 
 // ================= 플레이어 및 조작 =================
 const player = new THREE.Object3D();
-player.position.set(0, 500, 0); 
+player.position.set(0, 300, 0); 
 scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null;
@@ -178,13 +177,13 @@ function animate() {
   player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
   
   velY += gravity; player.position.y += velY;
+  
+  // 지형 충돌 혹은 수면 충돌 (수면 위에서 걷게 하려면 ground를 Math.max(terrainH, 1.7)로 조절 가능)
   const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.7;
-  if(player.position.y < terrainH){ player.position.y=terrainH; velY=0; canJump=true; }
-
-  // 구름 애니메이션 및 플레이어 추적
-  clouds.position.x = player.position.x;
-  clouds.position.z = player.position.z;
-  clouds.rotation.y += 0.0001; // 천천히 회전하며 흐르는 효과
+  // 바다에 빠지지 않고 수면 위를 걷게 하려면 아래 ground를 활성화하세요.
+  // 현재는 바다 속으로 들어갈 수 있는 설정입니다.
+  const ground = terrainH; 
+  if(player.position.y < ground){ player.position.y=ground; velY=0; canJump=true; }
 
   updateChunks(player.position.x, player.position.z);
   camera.position.copy(player.position);

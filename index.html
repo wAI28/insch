@@ -7,6 +7,7 @@
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
+
 #joystick{
   position:absolute;
   bottom:40px;
@@ -26,6 +27,7 @@ canvas{display:block;}
   left:35px;
   top:35px;
 }
+
 #jump{
   position:absolute;
   bottom:60px;
@@ -50,7 +52,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -58,7 +60,7 @@ document.body.appendChild(renderer.domElement);
 window.addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
 });
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
@@ -107,13 +109,14 @@ class Perlin {
     return this.lerp(v,x1,x2);
   }
 }
+
 const perlin = new Perlin();
 
 // ================= 부드러운 & 높은 지형 =================
 function smoothNoise(x,z){
   let y = 0;
-  let amplitude = 30 * 100; // 높이 ×100
-  let frequency = 0.004;
+  let amplitude = 30*100; // 높이 ×100
+  let frequency = 0.004; 
   for(let i=0;i<6;i++){
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
     amplitude *= 0.6;
@@ -123,7 +126,7 @@ function smoothNoise(x,z){
 }
 
 // ================= 청크 =================
-const chunkSize = 200 * 100; // 폭 ×100
+const chunkSize = 200*100; // 폭 ×100
 const segments = 50;
 const renderDistance = 2;
 const chunks = {};
@@ -173,15 +176,15 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,50,0);
+player.position.set(0,50*100,0);
 scene.add(player);
 
 let velocityY=0;
 let canJump=true;
-const gravity=-0.05;
+const gravity=-0.05*100;
 
 let move={x:0,z:0};
-const maxSpeed=1.5;
+const maxSpeed=1.5*100;
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -237,7 +240,7 @@ window.addEventListener("touchend",e=>{
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){ velocityY=1.5; canJump=true; }
+  if(canJump){ velocityY=1.5*100; canJump=true; }
 });
 
 // ================= 루프 =================
@@ -257,7 +260,7 @@ function animate(){
   velocityY+=gravity;
   player.position.y+=velocityY;
 
-  const ground=smoothNoise(player.position.x,player.position.z)+5;
+  const ground=smoothNoise(player.position.x,player.position.z)+5*100;
   if(player.position.y<=ground){ player.position.y=ground; velocityY=0; canJump=true; }
 
   updateChunks(player.position.x,player.position.z);

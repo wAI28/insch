@@ -3,20 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Deep Sea Explorer - Transparency Update</title>
+<title>Vast World - Jetpack Update</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
 #ui{position:absolute;bottom:40px;left:0;right:0;pointer-events:none;display:flex;justify-content:space-between;padding:0 40px;}
 #joystick{width:120px;height:120px;background:rgba(255,255,255,0.15);border-radius:50%;pointer-events:auto;border:2px solid rgba(255,255,255,0.2);position:relative;}
 #stick{width:50px;height:50px;background:rgba(255,255,255,0.5);border-radius:50%;position:absolute;left:35px;top:35px;}
-#jump{width:80px;height:80px;background:rgba(255,255,255,0.2);border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:white;font-family:sans-serif;font-weight:bold;user-select:none;}
+#btn-group{display:flex; flex-direction:column; align-items:center; gap:15px; pointer-events:none;}
+.btn{background:rgba(255,255,255,0.2); border-radius:50%; pointer-events:auto; display:flex; align-items:center; justify-content:center; color:white; font-family:sans-serif; font-weight:bold; user-select:none; border:1px solid rgba(255,255,255,0.3);}
+#jet{width:60px; height:60px; font-size:12px; background:rgba(255,100,0,0.3);}
+#jump{width:90px; height:90px; font-size:16px;}
 </style>
 </head>
 <body>
 <div id="ui">
   <div id="joystick"><div id="stick"></div></div>
-  <div id="jump">JUMP</div>
+  <div id="btn-group">
+    <div id="jet" class="btn">JET</div>
+    <div id="jump" class="btn">JUMP</div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
@@ -24,7 +30,7 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 const skyColor = new THREE.Color(0x82b4ff);
-const waterFogColor = new THREE.Color(0x002b5c); // 조금 더 맑은 수중 색상
+const waterFogColor = new THREE.Color(0x002b5c);
 scene.background = skyColor;
 scene.fog = new THREE.Fog(skyColor, 2000, 45000);
 
@@ -34,7 +40,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// ================= 빛나는 태양 =================
+// ================= 태양 =================
 function createSun() {
   const canvas = document.createElement('canvas');
   canvas.width = 128; canvas.height = 128;
@@ -44,12 +50,10 @@ function createSun() {
   grad.addColorStop(0.2, 'rgba(255, 255, 200, 0.8)');
   grad.addColorStop(1, 'transparent');
   ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
-  const sunTex = new THREE.CanvasTexture(canvas);
-  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, blending: THREE.AdditiveBlending }));
+  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending }));
   sunSprite.scale.set(3000, 3000, 1);
   sunSprite.position.set(8000, 10000, -12000);
   scene.add(sunSprite);
-
   const sunLight = new THREE.DirectionalLight(0xffffff, 2);
   sunLight.position.copy(sunSprite.position);
   scene.add(sunLight);
@@ -57,21 +61,16 @@ function createSun() {
 createSun();
 scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
-// ================= 바다 표면 (양면 렌더링 적용) =================
+// ================= 바다 =================
 const waterLevel = -15;
 const waterMat = new THREE.MeshStandardMaterial({
-  color: 0x0055ff, 
-  transparent: true, 
-  opacity: 0.55, 
-  roughness: 0.1,
-  side: THREE.DoubleSide // 물속에서도 수면이 보이게 설정
+  color: 0x0055ff, transparent: true, opacity: 0.55, roughness: 0.1, side: THREE.DoubleSide
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(100000, 100000), waterMat);
-water.rotateX(-Math.PI/2);
-water.position.y = waterLevel; 
+water.rotateX(-Math.PI/2); water.position.y = waterLevel;
 scene.add(water);
 
-// ================= 지형 로직 (Perlin Noise) =================
+// ================= 지형 (Perlin Noise) =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -102,19 +101,15 @@ function createChunk(cx, cz) {
   const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
   geo.rotateX(-Math.PI/2);
   const pos = geo.attributes.position, colors = [], color = new THREE.Color();
-
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
     if(h > 900) color.set(0xffffff);      
     else if(h > 500) color.set(0x444444); 
-    else if(h > 200) color.set(0x4a8a4a); // 연해진 숲 색상
+    else if(h > 200) color.set(0x4a8a4a); 
     else if(h > 35)  color.set(0x55bb55);  
     else if(h > -15) color.set(0xd2b48c);
-    else {
-      const depthFactor = Math.min(1, Math.max(0, (h + 15) / -285)); 
-      color.set(0xd2b48c).lerp(new THREE.Color(0x00081a), depthFactor);
-    }
+    else { const d = Math.min(1, Math.max(0, (h + 15) / -285)); color.set(0xd2b48c).lerp(new THREE.Color(0x00081a), d); }
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -131,19 +126,20 @@ function updateChunks(px, pz) {
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
 }
 
-// ================= 플레이어 조작 & 물리 =================
+// ================= 플레이어 및 조작 =================
 const player = new THREE.Object3D();
-player.position.set(0, 300, 0); 
-scene.add(player);
+player.position.set(0, 300, 0); scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null, lx=0, ly=0;
-let isUnderwater = false;
+let isUnderwater = false, isJetpackOn = false;
 const move = {x:0, z:0};
+
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 
+// 조이스틱 및 시점 조작
 joy.addEventListener("touchstart", e => { e.preventDefault(); joyId = e.changedTouches[0].identifier; }, {passive: false});
 window.addEventListener("touchstart", e => {
-  for(const t of e.changedTouches) { if(t.target !== joy && t.target !== stick && t.target.id !== "jump") { lookId = t.identifier; lx = t.clientX; ly = t.clientY; } }
+  for(const t of e.changedTouches) { if(t.target.className !== "btn" && t.target !== joy && t.target !== stick) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; } }
 }, {passive: false});
 
 window.addEventListener("touchmove", e => {
@@ -168,51 +164,53 @@ window.addEventListener("touchend", e => {
   }
 });
 
-document.getElementById("jump").addEventListener("touchstart", e => {
+// 점프 및 제트팩 버튼 이벤트
+const jumpBtn = document.getElementById("jump");
+const jetBtn = document.getElementById("jet");
+
+jumpBtn.addEventListener("touchstart", e => {
   e.preventDefault();
   if(isUnderwater) velY = 0.25; 
   else if(canJump) { velY = 0.45; canJump = false; }
 }, {passive: false});
 
-// ================= 애니메이션 루프 =================
+jetBtn.addEventListener("touchstart", e => { e.preventDefault(); isJetpackOn = true; jetBtn.style.background = "rgba(255,150,0,0.6)"; }, {passive: false});
+jetBtn.addEventListener("touchend", e => { e.preventDefault(); isJetpackOn = false; jetBtn.style.background = "rgba(255,100,0,0.3)"; }, {passive: false});
+
+// ================= 메인 루프 =================
 function animate() {
   requestAnimationFrame(animate);
 
-  isUnderwater = player.position.y < (waterLevel + 1.0); // 카메라 위치 기준 체크
+  isUnderwater = player.position.y < (waterLevel + 1.0);
   const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.9;
 
+  // 이동
   const currentSpeed = isUnderwater ? 0.6 : 1.2;
   const fw = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
   const rt = new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion);
   player.position.addScaledVector(fw, -move.z * currentSpeed).addScaledVector(rt, move.x * currentSpeed);
 
+  // 물리 (제트팩 포함)
+  if(isJetpackOn) {
+    velY += 0.025; // 제트팩 추진력
+    if(velY > 0.8) velY = 0.8; // 최대 상승 속도 제한
+    canJump = false;
+  }
+
   if (isUnderwater) {
-    velY += -0.004; // 수중 부력 물리
-    velY *= 0.96;   
+    velY += -0.004; velY *= 0.96;   
     if (player.position.y < waterLevel - 2) velY += 0.002; 
-    document.getElementById("jump").innerText = "SWIM";
-
-    // 수중 시야: 밖이 보이도록 안개 거리를 넉넉히 설정
-    scene.background = waterFogColor;
-    scene.fog.color.copy(waterFogColor);
-    scene.fog.near = 0;
-    scene.fog.far = 1200; 
-    waterMat.opacity = 0.45; // 물속에서 위를 볼 때 더 맑게
+    jumpBtn.innerText = "SWIM";
+    scene.background = waterFogColor; scene.fog.color.copy(waterFogColor); scene.fog.near = 0; scene.fog.far = 1200; waterMat.opacity = 0.45;
   } else {
-    velY += -0.015; // 지상 물리
-    document.getElementById("jump").innerText = "JUMP";
-
-    // 지상 시야
-    scene.background = skyColor;
-    scene.fog.color.copy(skyColor);
-    scene.fog.near = 2000;
-    scene.fog.far = 45000;
-    waterMat.opacity = 0.55;
+    velY += -0.015;
+    jumpBtn.innerText = "JUMP";
+    scene.background = skyColor; scene.fog.color.copy(skyColor); scene.fog.near = 2000; scene.fog.far = 45000; waterMat.opacity = 0.55;
   }
 
   player.position.y += velY;
 
-  // 지형 충돌 방지
+  // 지형 충돌
   if(player.position.y < terrainH) {
     player.position.y = terrainH;
     velY = 0;
@@ -220,11 +218,9 @@ function animate() {
   }
 
   updateChunks(player.position.x, player.position.z);
-  
   camera.position.copy(player.position);
   const look = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(1,0,0), pitch).applyQuaternion(player.quaternion);
   camera.lookAt(player.position.clone().add(look));
-  
   renderer.render(scene, camera);
 }
 animate();

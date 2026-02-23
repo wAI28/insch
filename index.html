@@ -3,58 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World Smooth & Tall Terrain</title>
+<title>Epic Open World - Massive Terrain</title>
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
 
+/* 조이스틱 UI */
 #joystick{
   position:absolute;
   bottom:40px;
   left:30px;
   width:120px;
   height:120px;
-  background:rgba(255,255,255,0.25);
+  background:rgba(255,255,255,0.2);
   border-radius:50%;
   touch-action:none;
+  border: 2px solid rgba(255,255,255,0.3);
 }
 #stick{
   position:absolute;
   width:50px;
   height:50px;
-  background:rgba(255,255,255,0.6);
+  background:rgba(255,255,255,0.5);
   border-radius:50%;
   left:35px;
   top:35px;
 }
 
+/* 점프 버튼 UI */
 #jump{
   position:absolute;
   bottom:60px;
   right:40px;
   width:80px;
   height:80px;
-  background:rgba(255,255,255,0.4);
+  background:rgba(255,255,255,0.3);
   border-radius:50%;
   touch-action:none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-family: sans-serif;
+  user-select: none;
 }
 </style>
 </head>
 <body>
 
 <div id="joystick"><div id="stick"></div></div>
-<div id="jump"></div>
+<div id="jump">JUMP</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+// 안개 범위를 800 -> 3000으로 늘려 거대함을 표현
+scene.fog = new THREE.Fog(0x87ceeb, 500, 3500);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.5, 5000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio); // 고해상도 대응
 document.body.appendChild(renderer.domElement);
 
 window.addEventListener("resize", ()=>{
@@ -63,20 +76,23 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
+// 광원 추가 (태양광 느낌)
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+sunLight.position.set(100, 500, 100);
+scene.add(sunLight);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.8));
 
 // ================= 텍스처 =================
 const textureLoader = new THREE.TextureLoader();
 const grassTexture = textureLoader.load(
   "https://threejs.org/examples/textures/terrain/grasslight-big.jpg"
 );
-grassTexture.wrapS = THREE.RepeatWrapping;
-grassTexture.wrapT = THREE.RepeatWrapping;
-grassTexture.repeat.set(20,20);
+grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+grassTexture.repeat.set(40, 40); // 텍스처 반복을 늘려 디테일 유지
 
-// ================= 퍼린 노이즈 =================
+// ================= 퍼린 노이즈 알고리즘 =================
 class Perlin {
-  constructor(seed=Math.random()*10000){
+  constructor(){
     this.p = new Uint8Array(512);
     for(let i=0;i<256;i++) this.p[i]=i;
     for(let i=0;i<256;i++){
@@ -89,187 +105,164 @@ class Perlin {
   lerp(t,a,b){ return a + t*(b-a); }
   grad(hash,x,y){ 
     const h = hash & 3;
-    const u = h<2 ? x : y;
-    const v = h<2 ? y : x;
-    return ((h&1)===0 ? u : -u) + ((h&2)===0 ? v : -v);
+    return ((h&1)===0 ? (h<2?x:y) : -(h<2?x:y)) + ((h&2)===0 ? (h<2?y:x) : -(h<2?y:x));
   }
   noise(x,y){
-    const X = Math.floor(x) & 255;
-    const Y = Math.floor(y) & 255;
-    const xf = x - Math.floor(x);
-    const yf = y - Math.floor(y);
-    const u = this.fade(xf);
-    const v = this.fade(yf);
-    const aa = this.p[this.p[X]+Y];
-    const ab = this.p[this.p[X]+Y+1];
-    const ba = this.p[this.p[X+1]+Y];
-    const bb = this.p[this.p[X+1]+Y+1];
-    const x1 = this.lerp(u,this.grad(aa,xf,yf),this.grad(ba,xf-1,yf));
-    const x2 = this.lerp(u,this.grad(ab,xf,yf-1),this.grad(bb,xf-1,yf-1));
-    return this.lerp(v,x1,x2);
+    const X = Math.floor(x) & 255; const Y = Math.floor(y) & 255;
+    const xf = x - Math.floor(x); const yf = y - Math.floor(y);
+    const u = this.fade(xf); const v = this.fade(yf);
+    const aa = this.p[this.p[X]+Y], ab = this.p[this.p[X]+Y+1];
+    const ba = this.p[this.p[X+1]+Y], bb = this.p[this.p[X+1]+Y+1];
+    return this.lerp(v, this.lerp(u,this.grad(aa,xf,yf),this.grad(ba,xf-1,yf)),
+                        this.lerp(u,this.grad(ab,xf,yf-1),this.grad(bb,xf-1,yf-1)));
   }
 }
-
 const perlin = new Perlin();
 
-// ================= 부드러운 & 높은 지형 =================
-function smoothNoise(x,z){
+// ================= 거대 지형 생성 로직 =================
+function smoothNoise(x, z) {
   let y = 0;
-  let amplitude = 30; // 높낮이 폭을 키움
-  let frequency = 0.004; // 낮은 주파수로 부드럽게
-  for(let i=0;i<6;i++){ // 옥타브를 더 넣어 더 자연스럽게
-    y += perlin.noise(x*frequency, z*frequency) * amplitude;
-    amplitude *= 0.6; // 옥타브별 감쇠 완만하게
-    frequency *= 2;
+  let amplitude = 220;    // 산의 높이 대폭 증가 (기존 30)
+  let frequency = 0.0007; // 지형의 폭을 매우 넓게 (기존 0.004)
+  
+  for(let i=0; i<5; i++) {
+    y += perlin.noise(x * frequency, z * frequency) * amplitude;
+    amplitude *= 0.45;
+    frequency *= 2.2;
   }
   return y;
 }
 
-// ================= 청크 =================
-const chunkSize = 200;
-const segments = 50;
-const renderDistance = 2;
+// ================= 청크 시스템 =================
+const chunkSize = 500;      // 한 구역의 크기를 키움
+const segments = 40;        // 폴리곤 밀도 조절
+const renderDistance = 3;   // 가시거리 (주변 3x3 청크)
 const chunks = {};
 
-function createChunk(cx,cz){
-  const key = cx+","+cz;
+function createChunk(cx, cz) {
+  const key = `${cx},${cz}`;
   if(chunks[key]) return;
 
-  const geo = new THREE.PlaneGeometry(chunkSize,chunkSize,segments,segments);
+  const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
   geo.rotateX(-Math.PI/2);
 
-  const verts = geo.attributes.position;
-  for(let i=0;i<verts.count;i++){
-    const x = verts.getX(i)+cx*chunkSize;
-    const z = verts.getZ(i)+cz*chunkSize;
-    verts.setY(i, smoothNoise(x,z));
+  const pos = geo.attributes.position;
+  for(let i=0; i<pos.count; i++) {
+    const x = pos.getX(i) + cx * chunkSize;
+    const z = pos.getZ(i) + cz * chunkSize;
+    pos.setY(i, smoothNoise(x, z));
   }
-
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({map: grassTexture});
-  const mesh = new THREE.Mesh(geo,mat);
-  mesh.position.set(cx*chunkSize,0,cz*chunkSize);
+  const mat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 0.8 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(cx * chunkSize, 0, cz * chunkSize);
   scene.add(mesh);
-  chunks[key]=mesh;
+  chunks[key] = mesh;
 }
 
-function updateChunks(px,pz){
+function updateChunks(px, pz) {
   const currentCX = Math.floor(px/chunkSize);
   const currentCZ = Math.floor(pz/chunkSize);
 
-  for(let x=-renderDistance;x<=renderDistance;x++){
-    for(let z=-renderDistance;z<=renderDistance;z++){
-      createChunk(currentCX+x,currentCZ+z);
+  for(let x = -renderDistance; x <= renderDistance; x++) {
+    for(let z = -renderDistance; z <= renderDistance; z++) {
+      createChunk(currentCX + x, currentCZ + z);
     }
   }
 
-  for(const key in chunks){
-    const [cx,cz]=key.split(",").map(Number);
-    if(Math.abs(cx-currentCX)>renderDistance ||
-       Math.abs(cz-currentCZ)>renderDistance){
+  for(const key in chunks) {
+    const [cx, cz] = key.split(",").map(Number);
+    if(Math.abs(cx - currentCX) > renderDistance || Math.abs(cz - currentCZ) > renderDistance) {
       scene.remove(chunks[key]);
       delete chunks[key];
     }
   }
 }
 
-// ================= 플레이어 =================
+// ================= 플레이어 설정 =================
 const player = new THREE.Object3D();
-player.position.set(0,50,0);
+player.position.set(0, 150, 0); // 스케일이 커졌으니 높은 곳에서 시작
 scene.add(player);
 
-let velocityY=0;
-let canJump=true;
-const gravity=-0.05;
+let velocityY = 0;
+let canJump = true;
+const gravity = -0.08;
+const move = { x: 0, z: 0 };
+const walkSpeed = 3.5; // 거대해진 맵에 맞춰 이동속도 증가 (기존 1.5)
 
-let move={x:0,z:0};
-const maxSpeed=1.5;
+// ================= 컨트롤 (조이스틱 & 시점) =================
+const joy = document.getElementById("joystick"), stick = document.getElementById("stick");
+let joyId = null;
 
-// ================= 조이스틱 =================
-const joy=document.getElementById("joystick");
-const stick=document.getElementById("stick");
-let joyId=null;
-
-joy.addEventListener("touchstart",e=>{ joyId=e.changedTouches[0].identifier; });
-joy.addEventListener("touchend",()=>{
-  move={x:0,z:0};
-  stick.style.left="35px";
-  stick.style.top="35px";
-  joyId=null;
+joy.addEventListener("touchstart", e => { joyId = e.changedTouches[0].identifier; });
+joy.addEventListener("touchend", () => {
+  move.x = 0; move.z = 0;
+  stick.style.left = "35px"; stick.style.top = "35px";
+  joyId = null;
 });
-joy.addEventListener("touchmove",e=>{
-  for(const t of e.touches){
-    if(t.identifier===joyId){
-      const rect=joy.getBoundingClientRect();
-      const dx=t.clientX-rect.left-60;
-      const dy=t.clientY-rect.top-60;
-      const max=40;
-      const mx=Math.max(-max,Math.min(max,dx));
-      const my=Math.max(-max,Math.min(max,dy));
-      stick.style.left=mx+60-25+"px";
-      stick.style.top=my+60-25+"px";
-      move.x=mx/max;
-      move.z=my/max;
+joy.addEventListener("touchmove", e => {
+  for(const t of e.touches) {
+    if(t.identifier === joyId) {
+      const rect = joy.getBoundingClientRect();
+      const dx = t.clientX - rect.left - 60, dy = t.clientY - rect.top - 60;
+      const dist = Math.min(40, Math.sqrt(dx*dx + dy*dy));
+      const angle = Math.atan2(dy, dx);
+      const mx = Math.cos(angle) * dist, my = Math.sin(angle) * dist;
+      stick.style.left = mx + 60 - 25 + "px";
+      stick.style.top = my + 60 - 25 + "px";
+      move.x = mx/40; move.z = my/40;
     }
   }
 });
 
-// ================= 시점 =================
-let lookId=null,lastX=0,lastY=0,pitch=0;
-window.addEventListener("touchstart",e=>{
-  for(const t of e.changedTouches){
-    if(t.identifier!==joyId){ lookId=t.identifier; lastX=t.clientX; lastY=t.clientY; }
-  }
+let lookId = null, lastX = 0, lastY = 0, pitch = 0;
+window.addEventListener("touchstart", e => {
+  for(const t of e.changedTouches) { if(t.identifier !== joyId) { lookId = t.identifier; lastX = t.clientX; lastY = t.clientY; } }
 });
-window.addEventListener("touchmove",e=>{
-  for(const t of e.touches){
-    if(t.identifier===lookId){
-      const dx=t.clientX-lastX;
-      const dy=t.clientY-lastY;
-      player.rotation.y+=dx*0.005;
-      pitch-=dy*0.005;
-      pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch));
-      lastX=t.clientX; lastY=t.clientY;
+window.addEventListener("touchmove", e => {
+  for(const t of e.touches) {
+    if(t.identifier === lookId) {
+      player.rotation.y += (t.clientX - lastX) * -0.005;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch + (t.clientY - lastY) * -0.005));
+      lastX = t.clientX; lastY = t.clientY;
     }
   }
 });
-window.addEventListener("touchend",e=>{
-  for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=null; }
+window.addEventListener("touchend", e => { for(const t of e.changedTouches) if(t.identifier === lookId) lookId = null; });
+
+document.getElementById("jump").addEventListener("touchstart", () => {
+  if(canJump) { velocityY = 2.0; canJump = false; }
 });
 
-// ================= 점프 =================
-document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){ velocityY=1.5; canJump=true; }
-});
-
-// ================= 루프 =================
-function animate(){
+// ================= 메인 루프 =================
+function animate() {
   requestAnimationFrame(animate);
 
-  const forward=new THREE.Vector3(Math.sin(player.rotation.y),0,-Math.cos(player.rotation.y));
-  const right=new THREE.Vector3(Math.cos(player.rotation.y),0,Math.sin(player.rotation.y));
+  // 이동 계산
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+  const dir = new THREE.Vector3().addScaledVector(forward, -move.z).addScaledVector(right, move.x);
+  player.position.addScaledVector(dir, walkSpeed);
 
-  const dir=new THREE.Vector3();
-  dir.addScaledVector(forward,-move.z);
-  dir.addScaledVector(right,move.x);
-  if(dir.length()>1) dir.normalize();
+  // 중력 및 지형 충돌
+  velocityY += gravity;
+  player.position.y += velocityY;
+  const groundY = smoothNoise(player.position.x, player.position.z) + 10; // 플레이어 키 높이 약 10
+  if(player.position.y <= groundY) {
+    player.position.y = groundY;
+    velocityY = 0;
+    canJump = true;
+  }
 
-  player.position.addScaledVector(dir,maxSpeed);
+  updateChunks(player.position.x, player.position.z);
 
-  velocityY+=gravity;
-  player.position.y+=velocityY;
-
-  const ground=smoothNoise(player.position.x,player.position.z)+5;
-  if(player.position.y<=ground){ player.position.y=ground; velocityY=0; canJump=true; }
-
-  updateChunks(player.position.x,player.position.z);
-
+  // 카메라 업데이트
   camera.position.copy(player.position);
-  const lookDir=new THREE.Vector3(Math.sin(player.rotation.y)*Math.cos(pitch),Math.sin(pitch),-Math.cos(player.rotation.y)*Math.cos(pitch));
-  camera.lookAt(player.position.clone().add(lookDir));
+  const lookTarget = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(1,0,0), pitch).applyQuaternion(player.quaternion);
+  camera.lookAt(player.position.clone().add(lookTarget));
 
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }
 animate();
 </script>

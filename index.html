@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Vast World - Smooth Coastline Update</title>
+<title>Vast World - Pure Snow & Stable Sea</title>
 <style>
 body{margin:0;overflow:hidden;background:#4a86e8;}
 canvas{display:block;}
@@ -33,7 +33,7 @@ const waterFogColor = new THREE.Color(0x001a33);
 scene.background = skyColor;
 scene.fog = new THREE.Fog(skyColor, 2000, 45000);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.5, 65000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.5, 70000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -43,10 +43,10 @@ function createNoiseTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 256; canvas.height = 256;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = "#888888";
+  ctx.fillStyle = "#999999";
   ctx.fillRect(0,0,256,256);
   for(let i=0; i<8000; i++) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.15})`;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.1})`; // 눈 입자 느낌을 위해 밝은 점 추가
     ctx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
   }
   const tex = new THREE.CanvasTexture(canvas);
@@ -61,32 +61,33 @@ function createSun() {
   canvas.width = 128; canvas.height = 128;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createRadialGradient(64,64,0,64,64,64);
-  grad.addColorStop(0,'white'); grad.addColorStop(0.3,'rgba(255,240,150,0.8)'); grad.addColorStop(1,'transparent');
+  grad.addColorStop(0,'white'); grad.addColorStop(0.3,'rgba(255,245,200,0.8)'); grad.addColorStop(1,'transparent');
   ctx.fillStyle = grad; ctx.fillRect(0,0,128,128);
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending }));
-  sunSprite.scale.set(5000,5000,1); sunSprite.position.set(15000,15000,-20000);
+  sunSprite.scale.set(6000,6000,1); sunSprite.position.set(15000,18000,-25000);
   scene.add(sunSprite);
-  const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  const sunLight = new THREE.DirectionalLight(0xffffff, 1.6);
   sunLight.position.copy(sunSprite.position);
   scene.add(sunLight);
 }
 createSun();
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
 const waterLevel = -15.5;
-// 바다 재질에 polygonOffset 추가하여 지형과의 겹침 현상 방지
 const waterMat = new THREE.MeshStandardMaterial({ 
-  color: 0x0033aa, 
+  color: 0x0044cc, 
   transparent: true, 
-  opacity: 0.7, 
+  opacity: 0.75, 
   roughness: 0.1, 
   side: THREE.DoubleSide,
   polygonOffset: true,
   polygonOffsetFactor: -1,
   polygonOffsetUnits: -1
 });
-const water = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000), waterMat);
-water.rotateX(-Math.PI/2); water.position.y = waterLevel;
+// 바다 크기를 더 키우고 정밀도 안정화
+const water = new THREE.Mesh(new THREE.PlaneGeometry(300000, 300000), waterMat);
+water.rotateX(-Math.PI/2); 
+water.position.y = waterLevel;
 scene.add(water);
 
 class Perlin {
@@ -124,13 +125,12 @@ function createChunk(cx, cz) {
     pos.setY(i, h);
     const v = 0.8 + Math.random() * 0.2;
 
-    // 해안선 부드럽게 개선: 모래와 풀 경계를 부드럽게 보간
-    if(h > 1100) color.setRGB(0.9*v, 0.95*v, 1.0*v);
-    else if(h > 700) color.setRGB(0.4*v, 0.4*v, 0.45*v);
+    // 만년설 업데이트: 더 낮고 더 하얗게
+    if(h > 950) color.setRGB(1.2*v, 1.2*v, 1.2*v); // 한계를 넘는 흰색 (Bloom 효과 유도)
+    else if(h > 650) color.setRGB(0.4*v, 0.4*v, 0.48*v);
     else if(h > 350) color.setRGB(0.15*v, 0.35*v, 0.15*v);
     else if(h > 45)  color.setRGB(0.2*v, 0.5*v, 0.2*v);
     else if(h > waterLevel) {
-        // 해변 색상 보간 (모래색에서 녹색으로 서서히 전환)
         const t = (h - waterLevel) / (45 - waterLevel);
         const sand = new THREE.Color(0.7*v, 0.6*v, 0.4*v);
         const grass = new THREE.Color(0.2*v, 0.5*v, 0.2*v);
@@ -145,7 +145,7 @@ function createChunk(cx, cz) {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ 
-    vertexColors: true, map: terrainTex, roughness: 0.9, metalness: 0.1,
+    vertexColors: true, map: terrainTex, roughness: 0.85, metalness: 0.15,
     polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 
   }));
   mesh.position.set(cx * chunkSize, 0, cz * chunkSize);
@@ -154,7 +154,9 @@ function createChunk(cx, cz) {
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
-  water.position.set(px, water.position.y, pz);
+  // 바다 위치를 플레이어에 맞추되, 정밀도 오차 방지를 위해 큰 단위로 스냅
+  water.position.x = Math.floor(px / 100) * 100;
+  water.position.z = Math.floor(pz / 100) * 100;
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
 }

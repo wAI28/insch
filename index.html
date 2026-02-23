@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Vast Lands and Deep Oceans</title>
+<title>Vast Lands with Glowing Sun</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -32,25 +32,45 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-const sun = new THREE.DirectionalLight(0xffffff, 1.8);
-sun.position.set(1000, 2000, 1000);
-scene.add(sun);
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+// ================= 빛나는 태양 객체 추가 =================
+function createSun() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  grad.addColorStop(0.2, 'rgba(255, 255, 200, 0.8)');
+  grad.addColorStop(0.5, 'rgba(255, 200, 100, 0.3)');
+  grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
 
-// ================= 바다 (Sea Level) =================
+  const sunTex = new THREE.CanvasTexture(canvas);
+  const sunMat = new THREE.SpriteMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending });
+  const sunSprite = new THREE.Sprite(sunMat);
+  sunSprite.scale.set(2000, 2000, 1);
+  sunSprite.position.set(5000, 8000, -10000); // 고정된 먼 위치
+  scene.add(sunSprite);
+
+  // 실제 물리적 광원 (태양 위치와 동기화)
+  const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+  sunLight.position.copy(sunSprite.position);
+  scene.add(sunLight);
+}
+createSun();
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+// ================= 바다 (높이 -15로 약간 하향) =================
 const waterGeo = new THREE.PlaneGeometry(80000, 80000);
 const waterMat = new THREE.MeshStandardMaterial({
-  color: 0x0055ff, 
-  transparent: true, 
-  opacity: 0.6,
-  roughness: 0.1
+  color: 0x0055ff, transparent: true, opacity: 0.6, roughness: 0.1
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotateX(-Math.PI/2);
-water.position.y = 0; // 해수면을 0으로 설정
+water.position.y = -15; // 살짝 내림
 scene.add(water);
 
-// ================= 노이즈 알고리즘 =================
+// ================= 지형 로직 =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -78,7 +98,7 @@ class Perlin {
 const perlin = new Perlin();
 
 function getTerrainHeight(x, z) {
-  let y = -100; // 기본 높이를 낮춰서 바다가 잘 생기게 함
+  let y = -100;
   let amp = 1500, freq = 0.00008;
   for(let i=0; i<7; i++) {
     y += perlin.noise(x * freq, z * freq) * amp;
@@ -87,7 +107,6 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
-// ================= 청크 및 색상 =================
 const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
@@ -98,14 +117,11 @@ function createChunk(cx, cz) {
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
-    
-    // 고도별 색상
     if(h > 900) color.set(0xffffff);      
     else if(h > 500) color.set(0x444444); 
     else if(h > 200) color.set(0x2e5a2e); 
     else if(h > 30) color.set(0x44aa44);  
-    else color.set(0xd2b48c); // 30 이하 모래색 (해저 포함)
-    
+    else color.set(0xd2b48c);
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -117,7 +133,7 @@ function createChunk(cx, cz) {
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
-  water.position.x = px; water.position.z = pz; // 바다가 플레이어를 따라옴
+  water.position.x = px; water.position.z = pz;
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
 }
@@ -128,8 +144,7 @@ player.position.set(0, 300, 0);
 scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null;
-const walkSpeed = 1.2;
-const gravity = -0.015;
+const walkSpeed = 1.2, gravity = -0.015;
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 
@@ -177,13 +192,8 @@ function animate() {
   player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
   
   velY += gravity; player.position.y += velY;
-  
-  // 지형 충돌 혹은 수면 충돌 (수면 위에서 걷게 하려면 ground를 Math.max(terrainH, 1.7)로 조절 가능)
   const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.7;
-  // 바다에 빠지지 않고 수면 위를 걷게 하려면 아래 ground를 활성화하세요.
-  // 현재는 바다 속으로 들어갈 수 있는 설정입니다.
-  const ground = terrainH; 
-  if(player.position.y < ground){ player.position.y=ground; velY=0; canJump=true; }
+  if(player.position.y < terrainH){ player.position.y=terrainH; velY=0; canJump=true; }
 
   updateChunks(player.position.x, player.position.z);
   camera.position.copy(player.position);

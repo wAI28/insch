@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World Giant Terrain</title>
+<title>Infinite Open World 200x Terrain</title>
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
@@ -115,8 +115,8 @@ const perlin = new Perlin();
 // ================= 부드럽고 높은 & 폭 큰 지형 =================
 function smoothNoise(x,z){
   let y = 0;
-  let amplitude = 30000; // 높낮이 ×1000
-  let frequency = 0.004; // 주파수 낮게 유지 (부드럽게)
+  let amplitude = 3000; // 높낮이 ×200
+  let frequency = 0.004; 
   for(let i=0;i<6;i++){
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
     amplitude *= 0.6;
@@ -126,7 +126,7 @@ function smoothNoise(x,z){
 }
 
 // ================= 청크 =================
-const chunkSize = 200000; // 폭 ×1000
+const chunkSize = 40000; // 폭 ×200
 const segments = 50;
 const renderDistance = 2;
 const chunks = {};
@@ -176,7 +176,7 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,50,0); // 플레이어 그대로
+player.position.set(0,50,0);
 scene.add(player);
 
 let velocityY=0;

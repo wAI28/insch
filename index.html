@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Deep Sea Explorer - Physics Fixed</title>
+<title>Deep Sea Explorer - Buoyancy Update</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -16,7 +16,7 @@ canvas{display:block;}
 <body>
 <div id="ui">
   <div id="joystick"><div id="stick"></div></div>
-  <div id="jump">JUMP</div>
+  <div id="jump">SWIM</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
@@ -24,7 +24,7 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 const skyColor = new THREE.Color(0x82b4ff);
-const waterFogColor = new THREE.Color(0x001e44); // 수중 안개 색상
+const waterFogColor = new THREE.Color(0x001e44);
 scene.background = skyColor;
 scene.fog = new THREE.Fog(skyColor, 2000, 45000);
 
@@ -34,108 +34,74 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// ================= 빛나는 태양 =================
+// ================= 태양 =================
 function createSun() {
   const canvas = document.createElement('canvas');
   canvas.width = 128; canvas.height = 128;
   const ctx = canvas.getContext('2d');
   const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  grad.addColorStop(0, 'white');
   grad.addColorStop(0.2, 'rgba(255, 255, 200, 0.8)');
-  grad.addColorStop(0.5, 'rgba(255, 200, 100, 0.3)');
-  grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 128, 128);
-
-  const sunTex = new THREE.CanvasTexture(canvas);
-  const sunMat = new THREE.SpriteMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending });
-  const sunSprite = new THREE.Sprite(sunMat);
-  sunSprite.scale.set(2500, 2500, 1);
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
+  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), blending: THREE.AdditiveBlending }));
+  sunSprite.scale.set(3000, 3000, 1);
   sunSprite.position.set(8000, 10000, -12000);
   scene.add(sunSprite);
-
-  const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+  const sunLight = new THREE.DirectionalLight(0xffffff, 2);
   sunLight.position.copy(sunSprite.position);
   scene.add(sunLight);
 }
 createSun();
 scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
-// ================= 바다 표면 =================
+// ================= 바다 =================
 const waterLevel = -15;
-const waterGeo = new THREE.PlaneGeometry(100000, 100000);
-const waterMat = new THREE.MeshStandardMaterial({
-  color: 0x0055ff, transparent: true, opacity: 0.5, roughness: 0.1
-});
-const water = new THREE.Mesh(waterGeo, waterMat);
-water.rotateX(-Math.PI/2);
-water.position.y = waterLevel; 
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(100000, 100000),
+  new THREE.MeshStandardMaterial({color: 0x0055ff, transparent: true, opacity: 0.5, roughness: 0.1})
+);
+water.rotateX(-Math.PI/2); water.position.y = waterLevel;
 scene.add(water);
 
-// ================= 지형 로직 =================
+// ================= 노이즈 & 지형 =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
     for(let i=0;i<256;i++) this.p[i]=i;
-    for(let i=255;i>0;i--){
-      const j = Math.floor(Math.random()*(i+1));
-      [this.p[i], this.p[j]]=[this.p[j], this.p[i]];
-    }
+    for(let i=255;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [this.p[i], this.p[j]]=[this.p[j], this.p[i]]; }
     for(let i=0;i<256;i++) this.p[i+256]=this.p[i];
   }
   fade(t){ return t*t*t*(t*(t*6-15)+10); }
   lerp(t,a,b){ return a + t*(b-a); }
-  grad(hash,x,y){ 
-    const h = hash & 15;
-    return ((h<8?x:y) * ((h&1)?-1:1)) + ((h<4?y:(h==12||h==14?x:0)) * ((h&2)?-1:1));
-  }
+  grad(hash,x,y){ const h = hash & 15; return ((h<8?x:y) * ((h&1)?-1:1)) + ((h<4?y:(h==12||h==14?x:0)) * ((h&2)?-1:1)); }
   noise(x,y){
-    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
-    const xf = x-Math.floor(x), yf = y-Math.floor(y);
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, xf = x-Math.floor(x), yf = y-Math.floor(y);
     const u=this.fade(xf), v=this.fade(yf);
     const aa=this.p[this.p[X]+Y], ab=this.p[this.p[X]+Y+1], ba=this.p[this.p[X+1]+Y], bb=this.p[this.p[X+1]+Y+1];
     return this.lerp(v, this.lerp(u,this.grad(aa,xf,yf),this.grad(ba,xf-1,yf)), this.lerp(u,this.grad(ab,xf,yf-1),this.grad(bb,xf-1,yf-1)));
   }
 }
 const perlin = new Perlin();
-
 function getTerrainHeight(x, z) {
-  let y = -80;
-  let amp = 1500, freq = 0.00008;
-  for(let i=0; i<7; i++) {
-    y += perlin.noise(x * freq, z * freq) * amp;
-    amp *= 0.48; freq *= 2.2;
-  }
+  let y = -80, amp = 1500, freq = 0.00008;
+  for(let i=0; i<7; i++) { y += perlin.noise(x * freq, z * freq) * amp; amp *= 0.48; freq *= 2.2; }
   return y;
 }
 
 const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
 function createChunk(cx, cz) {
-  const key = `${cx},${cz}`;
-  if(chunks[key]) return;
+  const key = `${cx},${cz}`; if(chunks[key]) return;
   const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
   geo.rotateX(-Math.PI/2);
   const pos = geo.attributes.position, colors = [], color = new THREE.Color();
-
-  const snow = new THREE.Color(0xffffff);
-  const rock = new THREE.Color(0x444444);
-  const midForest = new THREE.Color(0x4a8a4a); // 연하게 조정한 숲
-  const grass = new THREE.Color(0x55bb55);
-  const sand = new THREE.Color(0xd2b48c);
-  const deepSea = new THREE.Color(0x00081a);
-
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
-    if(h > 900) color.copy(snow);      
-    else if(h > 500) color.copy(rock); 
-    else if(h > 200) color.copy(midForest); 
-    else if(h > 35)  color.copy(grass);  
-    else if(h > -15) color.copy(sand);
-    else {
-      const depthFactor = Math.min(1, Math.max(0, (h + 15) / -285)); 
-      color.copy(sand).lerp(deepSea, depthFactor);
-    }
+    if(h > 900) color.set(0xffffff); else if(h > 500) color.set(0x444444); 
+    else if(h > 200) color.set(0x4a8a4a); else if(h > 35) color.set(0x55bb55);
+    else if(h > -15) color.set(0xd2b48c);
+    else { const d = Math.min(1, Math.max(0, (h + 15) / -285)); color.set(0xd2b48c).lerp(new THREE.Color(0x00081a), d); }
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -147,28 +113,24 @@ function createChunk(cx, cz) {
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
-  water.position.x = px; water.position.z = pz;
+  water.position.set(px, waterLevel, pz);
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
 }
 
-// ================= 플레이어 조작 =================
+// ================= 플레이어 & 물리 (부력 추가) =================
 const player = new THREE.Object3D();
-player.position.set(0, 300, 0); 
-scene.add(player);
+player.position.set(0, 300, 0); scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null, lx=0, ly=0;
-const walkSpeed = 1.2, gravity = -0.015;
+let isUnderwater = false;
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 
+// 입력 이벤트
 joy.addEventListener("touchstart", e => { e.preventDefault(); joyId = e.changedTouches[0].identifier; }, {passive: false});
 window.addEventListener("touchstart", e => {
-  for(const t of e.changedTouches) {
-    if(t.target !== joy && t.target !== stick && t.target.id !== "jump") {
-      lookId = t.identifier; lx = t.clientX; ly = t.clientY;
-    }
-  }
+  for(const t of e.changedTouches) { if(t.target !== joy && t.target !== stick && t.target.id !== "jump") { lookId = t.identifier; lx = t.clientX; ly = t.clientY; } }
 }, {passive: false});
 
 window.addEventListener("touchmove", e => {
@@ -194,42 +156,70 @@ window.addEventListener("touchend", e => {
 });
 
 document.getElementById("jump").addEventListener("touchstart", e => {
-  e.preventDefault(); if(canJump){velY=0.4; canJump=false;}
+  e.preventDefault();
+  if(isUnderwater) {
+    velY = 0.25; // 수중 수영
+  } else if(canJump) {
+    velY = 0.45; // 지상 점프
+    canJump = false;
+  }
 }, {passive: false});
 
 // ================= 메인 루프 =================
 function animate() {
   requestAnimationFrame(animate);
+
+  // 현재 위치 상태 체크
+  isUnderwater = player.position.y < waterLevel;
+  const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.9;
+
+  // 이동 속도 조절 (물속에서는 느려짐)
+  const currentSpeed = isUnderwater ? 0.6 : 1.2;
   const fw = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
   const rt = new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion);
-  player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
-  
-  velY += gravity; player.position.y += velY;
-  
-  const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.8;
-  if(player.position.y < terrainH){ 
-    player.position.y = terrainH; 
-    velY = 0; 
-    canJump = true; 
+  player.position.addScaledVector(fw, -move.z * currentSpeed).addScaledVector(rt, move.x * currentSpeed);
+
+  // 물리 처리 (중력 vs 부력)
+  if (isUnderwater) {
+    // 부력 효과: 중력을 약화시키고 위로 살짝 뜨게 함
+    velY += -0.004; // 약한 중력
+    velY *= 0.96;   // 물의 저항 (속도 감쇄)
+    // 수영 버튼을 안 눌러도 서서히 수면으로 떠오르는 성질
+    if (player.position.y < waterLevel - 2) velY += 0.002; 
+    document.getElementById("jump").innerText = "SWIM";
+  } else {
+    // 지상 중력
+    velY += -0.015;
+    document.getElementById("jump").innerText = "JUMP";
   }
 
-  // 수중 효과 처리
-  if(player.position.y < waterLevel) {
+  player.position.y += velY;
+
+  // 지형 충돌
+  if(player.position.y < terrainH) {
+    player.position.y = terrainH;
+    velY = 0;
+    canJump = true;
+  }
+
+  // 수중 안개 효과 전환
+  if(isUnderwater) {
     scene.background = waterFogColor;
     scene.fog.color = waterFogColor;
-    scene.fog.near = 0;
-    scene.fog.far = 150; // 물속 시야 단축
+    scene.fog.near = 0; scene.fog.far = 180;
   } else {
     scene.background = skyColor;
     scene.fog.color = skyColor;
-    scene.fog.near = 2000;
-    scene.fog.far = 45000;
+    scene.fog.near = 2000; scene.fog.far = 45000;
   }
 
   updateChunks(player.position.x, player.position.z);
+  
+  // 카메라 업데이트
   camera.position.copy(player.position);
   const look = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(1,0,0), pitch).applyQuaternion(player.quaternion);
   camera.lookAt(player.position.clone().add(look));
+  
   renderer.render(scene, camera);
 }
 animate();

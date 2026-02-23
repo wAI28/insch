@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Vast World - Clipping Fixed</title>
+<title>Deep Sea Explorer - Physics Fixed</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -23,10 +23,11 @@ canvas{display:block;}
 <script>
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x82b4ff);
-scene.fog = new THREE.Fog(0x82b4ff, 2000, 45000);
+const skyColor = new THREE.Color(0x82b4ff);
+const waterFogColor = new THREE.Color(0x001e44); // 수중 안개 색상
+scene.background = skyColor;
+scene.fog = new THREE.Fog(skyColor, 2000, 45000);
 
-// camera.near를 0.1로 낮춰 근거리 렌더링 최적화
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 65000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
@@ -61,16 +62,17 @@ createSun();
 scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
 // ================= 바다 표면 =================
-const waterGeo = new THREE.PlaneGeometry(80000, 80000);
+const waterLevel = -15;
+const waterGeo = new THREE.PlaneGeometry(100000, 100000);
 const waterMat = new THREE.MeshStandardMaterial({
-  color: 0x0055ff, transparent: true, opacity: 0.55, roughness: 0.1
+  color: 0x0055ff, transparent: true, opacity: 0.5, roughness: 0.1
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotateX(-Math.PI/2);
-water.position.y = -15; 
+water.position.y = waterLevel; 
 scene.add(water);
 
-// ================= 지형 노이즈 알고리즘 =================
+// ================= 지형 로직 =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -107,9 +109,7 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
-// ================= 청크 및 색상 설정 =================
 const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
-
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
   if(chunks[key]) return;
@@ -119,7 +119,7 @@ function createChunk(cx, cz) {
 
   const snow = new THREE.Color(0xffffff);
   const rock = new THREE.Color(0x444444);
-  const midForest = new THREE.Color(0x407a40); 
+  const midForest = new THREE.Color(0x4a8a4a); // 연하게 조정한 숲
   const grass = new THREE.Color(0x55bb55);
   const sand = new THREE.Color(0xd2b48c);
   const deepSea = new THREE.Color(0x00081a);
@@ -127,7 +127,6 @@ function createChunk(cx, cz) {
   for(let i=0; i<pos.count; i++) {
     const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
-    
     if(h > 900) color.copy(snow);      
     else if(h > 500) color.copy(rock); 
     else if(h > 200) color.copy(midForest); 
@@ -207,12 +206,24 @@ function animate() {
   
   velY += gravity; player.position.y += velY;
   
-  // 충돌 감지 높이를 플레이어 키(1.7)보다 넉넉하게 설정해서 시점 뚫림 방지
   const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.8;
   if(player.position.y < terrainH){ 
     player.position.y = terrainH; 
     velY = 0; 
     canJump = true; 
+  }
+
+  // 수중 효과 처리
+  if(player.position.y < waterLevel) {
+    scene.background = waterFogColor;
+    scene.fog.color = waterFogColor;
+    scene.fog.near = 0;
+    scene.fog.far = 150; // 물속 시야 단축
+  } else {
+    scene.background = skyColor;
+    scene.fog.color = skyColor;
+    scene.fog.near = 2000;
+    scene.fog.far = 45000;
   }
 
   updateChunks(player.position.x, player.position.z);

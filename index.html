@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Walking through the Vast Lands</title>
+<title>Vast Lands with Floating Clouds</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
@@ -24,7 +24,7 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x82b4ff);
-scene.fog = new THREE.Fog(0x82b4ff, 3000, 40000);
+scene.fog = new THREE.Fog(0x82b4ff, 3000, 45000);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 60000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -35,16 +35,29 @@ document.body.appendChild(renderer.domElement);
 const sun = new THREE.DirectionalLight(0xffffff, 1.8);
 sun.position.set(1000, 2000, 1000);
 scene.add(sun);
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-const waterGeo = new THREE.PlaneGeometry(70000, 70000);
-const waterMat = new THREE.MeshStandardMaterial({color: 0x0044ff, transparent: true, opacity: 0.4});
-const water = new THREE.Mesh(waterGeo, waterMat);
-water.rotateX(-Math.PI/2);
-water.position.y = -50; 
-scene.add(water);
+// ================= 구름 시스템 (추가됨) =================
+const cloudCount = 1500;
+const cloudGeo = new THREE.BufferGeometry();
+const cloudPos = new Float32Array(cloudCount * 3);
+for(let i=0; i<cloudCount; i++) {
+  cloudPos[i*3] = (Math.random() - 0.5) * 15000;   // 넓은 범위
+  cloudPos[i*3+1] = 1200 + (Math.random() - 0.5) * 200; // 고도 1200 근처
+  cloudPos[i*3+2] = (Math.random() - 0.5) * 15000;
+}
+cloudGeo.setAttribute('position', new THREE.BufferAttribute(cloudPos, 3));
+const cloudMat = new THREE.PointsMaterial({
+  color: 0xffffff,
+  size: 80,
+  transparent: true,
+  opacity: 0.5,
+  depthWrite: false
+});
+const clouds = new THREE.Points(cloudGeo, cloudMat);
+scene.add(clouds);
 
-// ================= 노이즈 알고리즘 =================
+// ================= 지형 로직 (동일) =================
 class Perlin {
   constructor(){
     this.p = new Uint8Array(512);
@@ -80,57 +93,44 @@ function getTerrainHeight(x, z) {
   return y;
 }
 
-// ================= 청크 및 색상 설정 =================
-const chunkSize = 4000, segments = 50, renderDistance = 4, chunks = {};
-
+const chunkSize = 4000, segments = 45, renderDistance = 4, chunks = {};
 function createChunk(cx, cz) {
   const key = `${cx},${cz}`;
   if(chunks[key]) return;
-
   const geo = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
   geo.rotateX(-Math.PI/2);
   const pos = geo.attributes.position, colors = [], color = new THREE.Color();
-
   for(let i=0; i<pos.count; i++) {
-    const x = pos.getX(i) + cx * chunkSize;
-    const z = pos.getZ(i) + cz * chunkSize;
-    const h = getTerrainHeight(x, z);
+    const x = pos.getX(i) + cx * chunkSize, z = pos.getZ(i) + cz * chunkSize, h = getTerrainHeight(x, z);
     pos.setY(i, h);
-
-    if(h > 900) color.set(0xffffff);      // 만년설
-    else if(h > 500) color.set(0x444444); // 바위
-    else if(h > 200) color.set(0x2e5a2e); // 진한 초록색 (약간 연하게 조정)
-    else if(h > 50) color.set(0x44aa44);  // 연한 초록색
-    else color.set(0xd2b48c);             // 모래/해저
-    
+    if(h > 900) color.set(0xffffff);      
+    else if(h > 500) color.set(0x444444); 
+    else if(h > 200) color.set(0x2e5a2e); 
+    else if(h > 50) color.set(0x44aa44);  
+    else color.set(0xd2b48c);             
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
   mesh.position.set(cx * chunkSize, 0, cz * chunkSize);
   scene.add(mesh); chunks[key] = mesh;
 }
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
-  water.position.set(px, -50, pz);
   for(let x=-renderDistance; x<=renderDistance; x++)
     for(let z=-renderDistance; z<=renderDistance; z++) createChunk(ccx+x, ccz+z);
-  for(const key in chunks){
-    const [cx,cz]=key.split(",").map(Number);
-    if(Math.abs(cx-ccx)>renderDistance || Math.abs(cz-ccz)>renderDistance){ scene.remove(chunks[key]); delete chunks[key]; }
-  }
 }
 
-// ================= 조작 시스템 (속도 및 높이 조정) =================
+// ================= 플레이어 및 조작 =================
 const player = new THREE.Object3D();
 player.position.set(0, 500, 0); 
 scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0, joyId = null, lookId = null;
-const walkSpeed = 1.2; // 이동속도 대폭 하향 (걷는 느낌)
-const gravity = -0.015; // 높이가 낮아진 만큼 중력도 부드럽게 조정
+const walkSpeed = 1.2;
+const gravity = -0.015;
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 
@@ -178,11 +178,13 @@ function animate() {
   player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
   
   velY += gravity; player.position.y += velY;
-  
-  // 플레이어 눈높이: 지형 높이 + 1.7 (기존 18에서 하향)
   const terrainH = getTerrainHeight(player.position.x, player.position.z) + 1.7;
-  const ground = Math.max(terrainH, -48.3); 
-  if(player.position.y < ground){ player.position.y=ground; velY=0; canJump=true; }
+  if(player.position.y < terrainH){ player.position.y=terrainH; velY=0; canJump=true; }
+
+  // 구름 애니메이션 및 플레이어 추적
+  clouds.position.x = player.position.x;
+  clouds.position.z = player.position.z;
+  clouds.rotation.y += 0.0001; // 천천히 회전하며 흐르는 효과
 
   updateChunks(player.position.x, player.position.z);
   camera.position.copy(player.position);

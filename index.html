@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Infinite Open World Smooth & Tall Terrain ×100</title>
+<title>Infinite Open World Smooth & Tall Terrain</title>
 <style>
 body{margin:0;overflow:hidden;background:#87ceeb;}
 canvas{display:block;}
@@ -27,6 +27,7 @@ canvas{display:block;}
   left:35px;
   top:35px;
 }
+
 #jump{
   position:absolute;
   bottom:60px;
@@ -49,9 +50,9 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 0, 0); // 안개 제거
+scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -71,7 +72,7 @@ const grassTexture = textureLoader.load(
 );
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
-grassTexture.repeat.set(20,20); // 텍스처 크기는 그대로
+grassTexture.repeat.set(20,20);
 
 // ================= 퍼린 노이즈 =================
 class Perlin {
@@ -108,23 +109,24 @@ class Perlin {
     return this.lerp(v,x1,x2);
   }
 }
+
 const perlin = new Perlin();
 
-// ================= 부드러운 & 높은 지형 ×100 =================
+// ================= 부드러운 & 높은 지형 =================
 function smoothNoise(x,z){
   let y = 0;
-  let amplitude = 30*100; // 높이 ×100
-  let frequency = 0.004;
-  for(let i=0;i<6;i++){
+  let amplitude = 30; // 높낮이 폭을 키움
+  let frequency = 0.004; // 낮은 주파수로 부드럽게
+  for(let i=0;i<6;i++){ // 옥타브를 더 넣어 더 자연스럽게
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
-    amplitude *= 0.6;
+    amplitude *= 0.6; // 옥타브별 감쇠 완만하게
     frequency *= 2;
   }
   return y;
 }
 
 // ================= 청크 =================
-const chunkSize = 200*100; // 폭 ×100
+const chunkSize = 200;
 const segments = 50;
 const renderDistance = 2;
 const chunks = {};
@@ -174,8 +176,7 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-// 초기 위치를 청크 중앙 근처로
-player.position.set(chunkSize*renderDistance/2, 50*100, chunkSize*renderDistance/2);
+player.position.set(0,50,0);
 scene.add(player);
 
 let velocityY=0;

@@ -50,7 +50,7 @@ canvas{display:block;}
 // ================= 기본 세팅 =================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
+scene.fog = new THREE.Fog(0x87ceeb, 0, 0); // 안개 제거
 
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -60,7 +60,7 @@ document.body.appendChild(renderer.domElement);
 window.addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1.2));
@@ -112,11 +112,11 @@ class Perlin {
 
 const perlin = new Perlin();
 
-// ================= 부드러운 & 높은 지형 =================
+// ================= 부드러운 & 높은 지형 ×100 =================
 function smoothNoise(x,z){
   let y = 0;
   let amplitude = 30*100; // 높이 ×100
-  let frequency = 0.004; 
+  let frequency = 0.004;
   for(let i=0;i<6;i++){
     y += perlin.noise(x*frequency, z*frequency) * amplitude;
     amplitude *= 0.6;
@@ -176,15 +176,15 @@ function updateChunks(px,pz){
 
 // ================= 플레이어 =================
 const player = new THREE.Object3D();
-player.position.set(0,50*100,0);
+player.position.set(0,50*100,0); // 플레이어 높이 ×100
 scene.add(player);
 
 let velocityY=0;
 let canJump=true;
-const gravity=-0.05*100;
+const gravity=-0.05*100; // 중력도 ×100
 
 let move={x:0,z:0};
-const maxSpeed=1.5*100;
+const maxSpeed=1.5*100; // 이동속도 ×100
 
 // ================= 조이스틱 =================
 const joy=document.getElementById("joystick");
@@ -240,7 +240,7 @@ window.addEventListener("touchend",e=>{
 
 // ================= 점프 =================
 document.getElementById("jump").addEventListener("touchstart",()=>{
-  if(canJump){ velocityY=1.5*100; canJump=true; }
+  if(canJump){ velocityY=1.5*100; canJump=true; } // 점프 ×100
 });
 
 // ================= 루프 =================

@@ -3,37 +3,47 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Extreme Open World - Mega Scale</title>
+<title>Ultimate Mega-Scale Open World</title>
 <style>
 body{margin:0;overflow:hidden;background:#a3d2ff;}
 canvas{display:block;}
-#joystick{position:absolute;bottom:40px;left:30px;width:120px;height:120px;background:rgba(255,255,255,0.1);border-radius:50%;touch-action:none;border:1px solid rgba(255,255,255,0.2);}
-#stick{position:absolute;width:50px;height:50px;background:rgba(255,255,255,0.4);border-radius:50%;left:35px;top:35px;}
-#jump{position:absolute;bottom:60px;right:40px;width:80px;height:80px;background:rgba(255,255,255,0.2);border-radius:50%;touch-action:none;display:flex;align-items:center;justify-content:center;color:white;font-family:sans-serif;font-weight:bold;}
+#ui{position:absolute;bottom:40px;left:0;right:0;pointer-events:none;display:flex;justify-content:space-between;padding:0 40px;}
+#joystick{width:120px;height:120px;background:rgba(255,255,255,0.1);border-radius:50%;pointer-events:auto;border:1px solid rgba(255,255,255,0.2);position:relative;}
+#stick{width:50px;height:50px;background:rgba(255,255,255,0.4);border-radius:50%;position:absolute;left:35px;top:35px;}
+#jump{width:80px;height:80px;background:rgba(255,255,255,0.2);border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:white;font-family:sans-serif;font-weight:bold;user-select:none;}
 </style>
 </head>
 <body>
-<div id="joystick"><div id="stick"></div></div>
-<div id="jump">JUMP</div>
+<div id="ui">
+  <div id="joystick"><div id="stick"></div></div>
+  <div id="jump">JUMP</div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-// ================= 기본 세팅 (슈퍼 스케일용) =================
+// ================= 행성급 세팅 =================
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa3d2ff);
-// 안개를 훨씬 멀리 배치 (가시거리 3만)
-scene.fog = new THREE.Fog(0xa3d2ff, 2000, 30000);
+scene.background = new THREE.Color(0x82b4ff);
+scene.fog = new THREE.Fog(0x82b4ff, 5000, 45000); // 안개 범위를 극도로 넓힘
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 1, 50000);
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 2, 60000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-const light = new THREE.DirectionalLight(0xffffff, 1.5);
-light.position.set(500, 1000, 500);
-scene.add(light);
+const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+sun.position.set(1000, 2000, 1000);
+scene.add(sun);
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+// ================= 물(Sea Level) 추가 =================
+const waterGeo = new THREE.PlaneGeometry(60000, 60000);
+const waterMat = new THREE.MeshStandardMaterial({color: 0x0044ff, transparent: true, opacity: 0.6});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.rotateX(-Math.PI/2);
+water.position.y = -50; // 해수면 높이
+scene.add(water);
 
 // ================= 퍼린 노이즈 =================
 class Perlin {
@@ -62,23 +72,23 @@ class Perlin {
 }
 const perlin = new Perlin();
 
-// ================= 메가 스케일 지형 함수 =================
+// ================= 슈퍼 스케일 지형 알고리즘 =================
 function getTerrainHeight(x, z) {
   let y = 0;
-  let amp = 800;      // 산 높이 (압도적으로 상향)
-  let freq = 0.00015; // 산 폭 (대륙급으로 넓게)
-  for(let i=0; i<6; i++) {
+  let amp = 1500;      // 산의 최대 높이 (대폭 상향)
+  let freq = 0.00008;  // 지형의 너비 (더 광활하게)
+  for(let i=0; i<7; i++) {
     y += perlin.noise(x * freq, z * freq) * amp;
-    amp *= 0.5;
-    freq *= 2.1;
+    amp *= 0.48;
+    freq *= 2.2;
   }
   return y;
 }
 
-// ================= 청크 및 고도별 색상 =================
-const chunkSize = 2000; // 청크 하나가 이제 2km 급
+// ================= 청크 및 요청하신 고도별 색상 =================
+const chunkSize = 4000; // 청크당 4km
 const segments = 64;    
-const renderDistance = 4; // 주변 9km~까지 렌더링
+const renderDistance = 4;
 const chunks = {};
 
 function createChunk(cx, cz) {
@@ -98,18 +108,20 @@ function createChunk(cx, cz) {
     const h = getTerrainHeight(x, z);
     pos.setY(i, h);
 
-    // 고도별 색상 지정
-    if(h > 500) color.set(0xffffff);      // 만년설
-    else if(h > 250) color.set(0x887766); // 바위산
-    else if(h > -50) color.set(0x337733); // 평원/숲
-    else color.set(0x224422);             // 습지/계곡
+    // 요청하신 순서: 만년설 > 바위 > 진한초록 > 연한초록 > 모래 > 물
+    if(h > 900) color.set(0xffffff);      // 만년설 (흰색)
+    else if(h > 500) color.set(0x555555); // 바위 (짙은 회색)
+    else if(h > 200) color.set(0x114411); // 진한 초록색
+    else if(h > 50) color.set(0x44aa44);  // 연한 초록색
+    else if(h > -30) color.set(0xd2b48c); // 모래 (베이지)
+    else color.set(0x002266);             // 깊은 물속 색상
     
     colors.push(color.r, color.g, color.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(cx * chunkSize, 0, cz * chunkSize);
   scene.add(mesh);
@@ -118,6 +130,7 @@ function createChunk(cx, cz) {
 
 function updateChunks(px, pz) {
   const ccx = Math.round(px/chunkSize), ccz = Math.round(pz/chunkSize);
+  water.position.set(px, -50, pz); // 물 평면이 플레이어를 따라오게 함
   for(let x=-renderDistance; x<=renderDistance; x++){
     for(let z=-renderDistance; z<=renderDistance; z++){
       createChunk(ccx+x, ccz+z);
@@ -131,18 +144,18 @@ function updateChunks(px, pz) {
   }
 }
 
-// ================= 플레이어 조작 (속도 대폭 상향) =================
+// ================= 플레이어 및 조작 =================
 const player = new THREE.Object3D();
-player.position.set(0, 1000, 0); // 높은 곳에서 시작
+player.position.set(0, 1500, 0); 
 scene.add(player);
 
 let velY = 0, canJump = true, pitch = 0;
-const gravity = -0.15, walkSpeed = 12.0; // 이동속도 12 (축지법 수준)
+const gravity = -0.2, walkSpeed = 25.0; // 속도 대폭 상향 (축지법)
 
-// (조이스틱/시점 로직은 이전과 동일하되 감도 최적화)
 const move = {x:0, z:0};
 const joy=document.getElementById("joystick"), stick=document.getElementById("stick");
 let joyId=null;
+
 joy.addEventListener("touchstart", e => { joyId = e.changedTouches[0].identifier; });
 joy.addEventListener("touchend", () => { move.x=0; move.z=0; stick.style.left="35px"; stick.style.top="35px"; joyId=null; });
 joy.addEventListener("touchmove", e => {
@@ -163,7 +176,7 @@ window.addEventListener("touchmove", e=>{
     lx=t.clientX; ly=t.clientY;
   }
 });
-document.getElementById("jump").addEventListener("touchstart", ()=>{ if(canJump){velY=3.5; canJump=false;} });
+document.getElementById("jump").addEventListener("touchstart", ()=>{ if(canJump){velY=5.0; canJump=false;} });
 
 function animate() {
   requestAnimationFrame(animate);
@@ -172,7 +185,8 @@ function animate() {
   player.position.addScaledVector(fw, -move.z*walkSpeed).addScaledVector(rt, move.x*walkSpeed);
   
   velY += gravity; player.position.y += velY;
-  const ground = getTerrainHeight(player.position.x, player.position.z) + 15;
+  const terrainH = getTerrainHeight(player.position.x, player.position.z) + 15;
+  const ground = Math.max(terrainH, -35); // 물 높이(-50)보다 살짝 위에서 걷도록
   if(player.position.y < ground){ player.position.y=ground; velY=0; canJump=true; }
 
   updateChunks(player.position.x, player.position.z);
